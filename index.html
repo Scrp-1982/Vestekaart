@@ -355,10 +355,11 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.12";
+const VERSIE = "2026-11-09.13";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
+const VAPID_PUBLIEK = "BJILunTyTTs1tVMGS59tTBKmLGs3gKe2ph4sgGstHDLDTZObQbcaxS81N9Tiw0zaXkOvBo45Blapi1x9L8E1nvA";
 const KLEUREN = ["#2F6FDE", "#E8A317", "#1F8A5B", "#8B5CF6", "#E4572E", "#0EA5B7", "#D946A8", "#64748B"];
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -453,7 +454,13 @@ async function laad() {
   const fotos = S.deelnemers.map(d => d.foto_pad).filter(Boolean);
   if (fotos.length) await urlsVoor(fotos, "profielfotos", true);
   S.ik = S.deelnemers.find(d => d.user_id === S.user.id) || null;
+  S.niets = new Set();
+  if (S.ik) {
+    const { data: n } = await sb.from("niets_gehad").select("wedstrijd_id").eq("deelnemer_id", S.ik.id);
+    (n || []).forEach(x => S.niets.add(x.wedstrijd_id));
+  }
   if (!S.alsId || !deelnemer(S.alsId)) S.alsId = S.ik?.id || null;
+  zetIcoonGetal();
   S.metMfa = new Set();
   S.laatst = {};
   if (S.ik?.is_beheerder) {
@@ -578,6 +585,119 @@ async function mfaBlok(el) {
     <a class="knop" href="#tweestap" style="justify-self:start;text-decoration:none">Aanzetten</a>`;
 }
 
+// ---------------------------------------------------------------------
+// Meldingen en het getal op het icoon
+// ---------------------------------------------------------------------
+function teDoenAantal() {
+  if (!S.ik) return 0;
+  const nu = vandaag();
+  return S.wedstrijden.filter(w => w.datum <= nu && Number(w.open) > 0 && bedragBij(w.id, S.ik.id) === 0 && !hadNiets(w.id)).length;
+}
+function zetIcoonGetal() {
+  try {
+    if (!("setAppBadge" in navigator) || !("Notification" in window) || Notification.permission !== "granted") return;
+    const n = teDoenAantal();
+    (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+  } catch { /* niet ondersteund */ }
+}
+const pushKan = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const opBeginscherm = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+function b64uNaarSleutel(t) {
+  const s = t.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (t.length % 4)) % 4);
+  return Uint8Array.from(atob(s), c => c.charCodeAt(0));
+}
+// Wacht op de service worker, maar niet eindeloos
+async function swKlaar() {
+  if (!pushKan()) return null;
+  return Promise.race([navigator.serviceWorker.ready, new Promise(ok => setTimeout(() => ok(null), 5000))]);
+}
+async function mijnAbonnement() {
+  const reg = await swKlaar();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+async function registreerAbonnement(ab) {
+  const j = ab.toJSON();
+  const { error } = await sb.rpc("registreer_push", {
+    p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_apparaat: navigator.userAgent,
+  });
+  if (error) throw error;
+}
+// Bij het opstarten: staat dit apparaat aangemeld, houd de database dan bij
+async function controleerAbonnement() {
+  try {
+    if (!pushKan() || Notification.permission !== "granted") return;
+    const ab = await mijnAbonnement();
+    if (ab) await registreerAbonnement(ab);
+  } catch { /* niet erg */ }
+}
+
+async function meldingenBlok(el) {
+  const kop = `<h3>Meldingen</h3>`;
+  if (!pushKan() || (isIOS() && !opBeginscherm())) {
+    el.innerHTML = `${kop}<p class="klein muted">${isIOS()
+      ? "Meldingen en het getal op het icoon werken alleen als je de Vestekaart opent via het icoon op je beginscherm. Zet de app eerst op je beginscherm (Safari, Delen, Zet op beginscherm) en open hem daarvandaan."
+      : "Deze browser ondersteunt geen meldingen."}</p>`;
+    return;
+  }
+  if (Notification.permission === "denied") {
+    el.innerHTML = `${kop}<p class="klein muted">Meldingen zijn geblokkeerd. Zet ze aan in de instellingen van je telefoon: Instellingen, Berichtgeving, Vestekaart.</p>`;
+    return;
+  }
+  const ab = Notification.permission === "granted" ? await mijnAbonnement() : null;
+  if (!ab) {
+    el.innerHTML = `${kop}
+      <p class="klein muted">Krijg een melding zodra je kunt invullen wat je had, en een herinnering de avond voor een thuiswedstrijd als je nog iets open hebt staan. Het icoon laat dan ook zien hoeveel wedstrijden je nog kunt invullen.</p>
+      <button type="button" class="knop" id="pushAan" style="justify-self:start">Meldingen aanzetten</button>`;
+    $("#pushAan").onclick = async () => {
+      try {
+        const toestemming = await Notification.requestPermission();
+        if (toestemming !== "granted") return meldingenBlok(el);
+        const reg = await swKlaar();
+        if (!reg) throw new Error("De app is nog niet klaar voor meldingen. Sluit de app af en open hem opnieuw.");
+        const nieuw = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uNaarSleutel(VAPID_PUBLIEK) });
+        await registreerAbonnement(nieuw);
+        zetIcoonGetal();
+        toast("Meldingen staan aan");
+        meldingenBlok(el);
+      } catch (err) { fout(err, "Meldingen aanzetten"); }
+    };
+    return;
+  }
+  const { data: vk } = await sb.from("meldingvoorkeuren").select("*").eq("deelnemer_id", S.ik.id).maybeSingle();
+  const v = vk || { inlezen: true, herinnering: true, betaling: true };
+  const soorten = [["inlezen", "Aankopen ingelezen: geef aan wat je had"], ["herinnering", "Herinnering de avond voor een thuiswedstrijd, als je nog iets open hebt"]];
+  if (isBeheerder()) soorten.push(["betaling", "Iemand heeft een betaling doorgegeven"]);
+  el.innerHTML = `${kop}
+    <div class="status goed">Meldingen staan aan op dit apparaat.</div>
+    <div class="stapel" style="gap:10px">${soorten.map(([k, l]) => `<label class="knoppen" style="flex-wrap:nowrap;align-items:flex-start">
+      <input type="checkbox" data-vk="${k}" ${v[k] !== false ? "checked" : ""} style="width:22px;height:22px;min-height:0;flex:none;accent-color:var(--rood)"> <span>${l}</span></label>`).join("")}</div>
+    <p class="klein muted">Alleen het getal op het icoon, zonder meldingen op je scherm? Zet dan op je iPhone onder Instellingen, Berichtgeving, Vestekaart de Banners en Geluiden uit, en laat Badges aan.</p>
+    <div class="knoppen">
+      <button type="button" class="knop licht" id="pushTest">Testmelding sturen</button>
+      <button type="button" class="tekstknop" id="pushUit">Uitzetten op dit apparaat</button>
+    </div>`;
+  el.querySelectorAll("[data-vk]").forEach(c => (c.onchange = async () => {
+    const { error } = await sb.from("meldingvoorkeuren").upsert({ deelnemer_id: S.ik.id, [c.dataset.vk]: c.checked });
+    if (error) { c.checked = !c.checked; return fout(error, "Opslaan"); }
+    toast("Opgeslagen");
+  }));
+  $("#pushTest").onclick = async () => {
+    try {
+      const r = await roepFunctie("meldingen", { soort: "test" });
+      toast(r.verstuurd ? "Testmelding verstuurd" : "Er is geen melding verstuurd. Zet meldingen uit en weer aan.");
+    } catch (err) { fout(err, "Testmelding"); }
+  };
+  $("#pushUit").onclick = async () => {
+    try {
+      await sb.rpc("afmelden_push", { p_endpoint: ab.endpoint });
+      await ab.unsubscribe();
+      toast("Meldingen staan uit op dit apparaat");
+      meldingenBlok(el);
+    } catch (err) { fout(err, "Uitzetten"); }
+  };
+}
+
 // Vraagt de code als dit apparaat die (inmiddels) nodig heeft
 async function controleerCode() {
   if (!S.user) return false;
@@ -585,7 +705,11 @@ async function controleerCode() {
   if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") { toonMfaCode(); return true; }
   return false;
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && S.ik) controleerCode(); });
+document.addEventListener("visibilitychange", () => {
+  if (!S.ik) return;
+  if (document.visibilityState === "visible") controleerCode();
+  else zetIcoonGetal();
+});
 
 async function verversEnToon() {
   try { await laad(); } catch (e) { return fout(e, "Gegevens laden"); }
@@ -630,6 +754,7 @@ async function naInloggen(user) {
   }
   bouwTabs();
   $("#menuknop").hidden = false;
+  controleerAbonnement();
   window.onhashchange = route;
   route();
 }
@@ -767,8 +892,7 @@ function bedragBij(wedId, deelnemerId) {
   const tids = new Set(S.transacties.filter(t => t.wedstrijd_id === wedId).map(t => t.id));
   return S.claims.filter(c => c.deelnemer_id === deelnemerId && tids.has(c.transactie_id)).reduce((a, c) => a + Number(c.bedrag), 0);
 }
-const nietsSleutel = wedId => `vestekaart-niets-${S.user?.id}-${wedId}`;
-function hadNiets(wedId) { try { return localStorage.getItem(nietsSleutel(wedId)) === "1"; } catch { return false; } }
+function hadNiets(wedId) { return S.niets.has(wedId); }
 
 function kaartHtml() {
   const p = S.pot || {};
@@ -1015,10 +1139,12 @@ function toonWedstrijd(id) {
     if (!confirm("Deze aankoop en alle claims erop verwijderen?")) return;
     doe(() => sb.from("transacties").delete().eq("id", b.dataset.wegt), "Verwijderen");
   }));
-  $("#niets")?.addEventListener("click", () => {
-    try { localStorage.setItem(nietsSleutel(id), "1"); } catch { /* niet erg */ }
+  $("#niets")?.addEventListener("click", async () => {
+    const { error } = await sb.from("niets_gehad").insert({ deelnemer_id: S.ik.id, wedstrijd_id: id });
+    if (error) return fout(error, "Opslaan");
     toast("Genoteerd: niets bij deze wedstrijd");
     location.hash = "home";
+    verversEnToon();
   });
 }
 
@@ -1104,6 +1230,7 @@ function toonProfiel() {
       </div>
       <p class="klein muted" id="fotoStatus" role="status"></p>
     </div>
+    <div class="vlak" id="meldBlok"><h3>Meldingen</h3><p class="muted klein">Laden…</p></div>
     <div class="vlak" id="mfaBlok"><h3>Tweestapsverificatie</h3><p class="muted klein">Laden…</p></div>
     <form class="vlak" id="pw">
       <h3>Wachtwoord wijzigen</h3>
@@ -1125,6 +1252,7 @@ function toonProfiel() {
   };
   $("#uit").onclick = () => sb.auth.signOut();
   mfaBlok($("#mfaBlok"));
+  meldingenBlok($("#meldBlok"));
   $("#foto").onchange = async e => {
     const bestand = e.target.files[0];
     if (!bestand) return;
@@ -1797,6 +1925,10 @@ async function slaVoorstelOp() {
       if (sid && wid && wid !== V.wed) await sb.from("screenshots").update({ wedstrijd_id: wid }).eq("id", sid);
     }
     toast(`${n} ${n === 1 ? "regel" : "regels"} opgeslagen`);
+    const wedMelding = Object.values(wedPerShot)[0] || V.wed;
+    if (n > 0 && wedMelding) roepFunctie("meldingen", { soort: "ingelezen", wedstrijd_id: wedMelding })
+      .then(r => { if (r.verstuurd) toast(`Melding gestuurd naar ${r.ontvangers} ${r.ontvangers === 1 ? "deelnemer" : "deelnemers"}`); })
+      .catch(() => { /* melding is bijzaak */ });
     S.voorstel = null;
     await laad();
     location.hash = `wedstrijd/${Object.values(wedPerShot)[0] || V.wed}`;
@@ -1804,6 +1936,14 @@ async function slaVoorstelOp() {
     knop.disabled = false;
     fout(err, "Opslaan");
   }
+}
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => { /* geen meldingen mogelijk */ });
+  navigator.serviceWorker.addEventListener("message", e => {
+    const u = e.data && e.data.open;
+    if (u && u.includes("#")) location.hash = u.slice(u.indexOf("#") + 1);
+  });
 }
 
 start();
