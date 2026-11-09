@@ -219,6 +219,7 @@ pre.verslag { white-space: pre-wrap; font-size: .85rem; margin: 0; background: v
   display: inline-flex; border-radius: 8px;
 }
 .menuknop svg { width: 26px; height: 26px; }
+.menuknop[hidden] { display: none; }
 .menu { position: fixed; inset: 0; z-index: 30; background: rgba(20, 22, 28, .45); }
 .menu[hidden] { display: none; }
 .menu-paneel {
@@ -293,6 +294,12 @@ input[type=file] { padding: 8px; }
 .jouw .groot { font-family: var(--kop); font-size: 2.2rem; font-weight: 700; line-height: 1; }
 details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem; padding: 4px 0; }
 
+/* Tweestap */
+.codeveld { font-family: var(--kop); font-size: 2rem; letter-spacing: .3em; text-align: center; min-height: 56px; }
+.qr { width: 200px; height: 200px; background: #fff; padding: 8px; border-radius: 10px; justify-self: center; }
+.sleutel { word-break: break-all; font-size: .85rem; }
+.label.tweestap { background: color-mix(in srgb, var(--groen) 18%, var(--vlak)); color: var(--groen); }
+
 /* Melding */
 #toast {
   position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
@@ -326,7 +333,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.9";
+const VERSIE = "2026-11-09.10";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -420,7 +427,124 @@ async function laad() {
   if (fotos.length) await urlsVoor(fotos, "profielfotos", true);
   S.ik = S.deelnemers.find(d => d.user_id === S.user.id) || null;
   if (!S.alsId || !deelnemer(S.alsId)) S.alsId = S.ik?.id || null;
+  S.metMfa = new Set();
+  if (S.ik?.is_beheerder) {
+    const { data } = await sb.rpc("deelnemers_met_mfa");
+    S.metMfa = new Set((data || []).map(x => (typeof x === "string" ? x : Object.values(x)[0])));
+  }
 }
+function verbergNavigatie() {
+  $("#tabs").hidden = true;
+  $("#menuknop").hidden = true;
+  window.onhashchange = null;
+}
+
+// ---------------------------------------------------------------------
+// Tweestapsverificatie
+// ---------------------------------------------------------------------
+const codeVeld = id => `<input id="${id}" class="codeveld" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" placeholder="123456" aria-label="Code van 6 cijfers">`;
+
+async function mfaFactoren() {
+  const { data } = await sb.auth.mfa.listFactors();
+  const alle = data?.all || [];
+  return {
+    actief: alle.filter(f => f.factor_type === "totp" && f.status === "verified"),
+    half: alle.filter(f => f.status !== "verified"),
+  };
+}
+
+function toonMfaCode() {
+  verbergNavigatie();
+  titel("Vestekaart");
+  scherm().innerHTML = `
+    <form class="vlak" id="mfaForm">
+      <h2>Tweestapsverificatie</h2>
+      <p class="muted">Vul de code van 6 cijfers in uit je authenticator-app, bijvoorbeeld de app Wachtwoorden op je iPhone.</p>
+      ${codeVeld("mfaCode")}
+      <button class="knop">Bevestigen</button>
+      <button type="button" class="tekstknop" id="mfaUit">Uitloggen</button>
+      <p class="klein muted">Telefoon kwijt? Vraag Mike om je tweestapsverificatie uit te zetten.</p>
+    </form>`;
+  $("#mfaCode").focus();
+  $("#mfaUit").onclick = () => sb.auth.signOut();
+  $("#mfaForm").onsubmit = async e => {
+    e.preventDefault();
+    const code = $("#mfaCode").value.replace(/\D/g, "");
+    if (code.length !== 6) return toast("Vul de 6 cijfers in.");
+    const { actief } = await mfaFactoren();
+    if (!actief.length) return toast("Geen authenticator gevonden. Vraag Mike om hulp.");
+    const { error } = await sb.auth.mfa.challengeAndVerify({ factorId: actief[0].id, code });
+    if (error) { $("#mfaCode").select(); return toast("Deze code klopt niet of is verlopen. Probeer de nieuwste code."); }
+    const { data: { session } } = await sb.auth.getSession();
+    naInloggen(session.user);
+  };
+}
+
+async function toonMfaInstellen(verplicht) {
+  if (verplicht) verbergNavigatie();
+  titel("Tweestapsverificatie", verplicht ? null : "profiel");
+  scherm().innerHTML = `<p class="muted">Voorbereiden…</p>`;
+  const { actief, half } = await mfaFactoren();
+  for (const f of half) await sb.auth.mfa.unenroll({ factorId: f.id });
+  if (actief.length) { toast("Tweestapsverificatie staat al aan"); location.hash = "profiel"; return; }
+  const { data, error } = await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "Vestekaart " + Date.now(), issuer: "Vestekaart" });
+  if (error) {
+    scherm().innerHTML = `<div class="vlak"><p>Instellen lukte niet: ${esc(error.message)}</p>
+      <button class="knop licht" id="mfaUit">Uitloggen</button></div>`;
+    $("#mfaUit").onclick = () => sb.auth.signOut();
+    return;
+  }
+  const t = data.totp;
+  scherm().innerHTML = `
+    <form class="vlak" id="mfaSetup">
+      <h2>Tweestapsverificatie instellen</h2>
+      ${verplicht ? `<div class="status let">Als beheerder is tweestapsverificatie verplicht. Stel het eenmalig in om verder te gaan.</div>` : ""}
+      <p><b>1. Op je iPhone:</b> tik op <a href="${esc(t.uri)}">Toevoegen aan authenticator</a>. De app Wachtwoorden opent en bewaart de code.</p>
+      <p class="klein muted">Op een computer: scan de QR-code met de camera van je telefoon of met je authenticator-app.</p>
+      <img src="${esc(t.qr_code)}" alt="QR-code voor tweestapsverificatie" class="qr">
+      <p class="klein muted">Lukt scannen niet? Vul deze sleutel handmatig in:<br><code class="sleutel">${esc(t.secret)}</code></p>
+      <p><b>2. Vul de code van 6 cijfers in</b> die je authenticator nu laat zien:</p>
+      ${codeVeld("setupCode")}
+      <button class="knop">Tweestapsverificatie aanzetten</button>
+      ${verplicht ? `<button type="button" class="tekstknop" id="mfaUit">Uitloggen</button>` : ""}
+    </form>`;
+  $("#mfaUit")?.addEventListener("click", () => sb.auth.signOut());
+  $("#mfaSetup").onsubmit = async e => {
+    e.preventDefault();
+    const code = $("#setupCode").value.replace(/\D/g, "");
+    if (code.length !== 6) return toast("Vul de 6 cijfers in.");
+    const { error: e2 } = await sb.auth.mfa.challengeAndVerify({ factorId: data.id, code });
+    if (e2) { $("#setupCode").select(); return toast("Deze code klopt niet. Probeer de nieuwste code."); }
+    toast("Tweestapsverificatie staat aan");
+    const { data: { session } } = await sb.auth.getSession();
+    location.hash = verplicht ? "home" : "profiel";
+    naInloggen(session.user);
+  };
+}
+
+async function mfaBlok(el) {
+  const { actief } = await mfaFactoren();
+  const beheerder = isBeheerder();
+  if (actief.length) {
+    el.innerHTML = `<h3>Tweestapsverificatie</h3>
+      <div class="status goed">Staat aan. Bij het inloggen op een nieuw apparaat vraagt de app om een code uit je authenticator-app.</div>
+      ${beheerder ? `<p class="klein muted">Voor de beheerder is dit verplicht en kan het niet uit.</p>`
+        : `<button type="button" class="knop licht" id="mfaWeg" style="justify-self:start">Uitzetten</button>`}`;
+    $("#mfaWeg")?.addEventListener("click", async () => {
+      if (!confirm("Tweestapsverificatie uitzetten?")) return;
+      const { error } = await sb.auth.mfa.unenroll({ factorId: actief[0].id });
+      if (error) return fout(error, "Uitzetten");
+      await sb.auth.refreshSession();
+      toast("Tweestapsverificatie staat uit");
+      mfaBlok(el);
+    });
+    return;
+  }
+  el.innerHTML = `<h3>Tweestapsverificatie</h3>
+    <p class="klein muted">Extra beveiliging: bij het inloggen vul je naast je wachtwoord een code in uit een authenticator-app, zoals de app Wachtwoorden op je iPhone. Op een apparaat waar je al bent ingelogd, blijf je gewoon ingelogd.</p>
+    <a class="knop" href="#tweestap" style="justify-self:start;text-decoration:none">Aanzetten</a>`;
+}
+
 async function verversEnToon() {
   try { await laad(); } catch (e) { return fout(e, "Gegevens laden"); }
   route();
@@ -441,7 +565,13 @@ async function start() {
 async function naInloggen(user) {
   S.user = user;
   try {
+    // Tweestapsverificatie: eerst de code, of (beheerder) eerst instellen
+    const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+    S.aal = aal?.currentLevel || "aal1";
+    if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") return toonMfaCode();
     await sb.rpc("koppel_mij");
+    const { data: st } = await sb.rpc("mijn_status");
+    if (st?.is_beheerder && S.aal !== "aal2") return toonMfaInstellen(true);
     await laad();
   } catch (e) {
     scherm().innerHTML = `<div class="vlak"><p>De gegevens konden niet worden geladen: ${esc(e.message || e)}</p>
@@ -565,6 +695,7 @@ function route() {
   if (pad === "wedstrijden") { markeerTab("wedstrijden"); return toonWedstrijden(); }
   if (pad === "mijn") { markeerTab("mijn"); return toonMijn(); }
   if (pad === "profiel") { markeerTab("profiel"); return toonProfiel(); }
+  if (pad === "tweestap") { markeerTab("profiel"); return toonMfaInstellen(false); }
   if (pad === "inlezen" && arg && isBeheerder()) { markeerTab("wedstrijden"); return toonInlezen(arg); }
   if (pad === "verwerken" && arg && isBeheerder()) { markeerTab("beheer"); return toonVerwerken(arg); }
   if (pad === "beheer" && isBeheerder()) { markeerTab("beheer"); return toonBeheer(arg || "deelnemers"); }
@@ -931,6 +1062,7 @@ function toonProfiel() {
       </div>
       <p class="klein muted" id="fotoStatus" role="status"></p>
     </div>
+    <div class="vlak" id="mfaBlok"><h3>Tweestapsverificatie</h3><p class="muted klein">Laden…</p></div>
     <form class="vlak" id="pw">
       <h3>Wachtwoord wijzigen</h3>
       <label class="veld"><span>Nieuw wachtwoord (minstens 8 tekens)</span><input name="pw" type="password" minlength="8" autocomplete="new-password" required></label>
@@ -950,6 +1082,7 @@ function toonProfiel() {
     toast("Wachtwoord gewijzigd");
   };
   $("#uit").onclick = () => sb.auth.signOut();
+  mfaBlok($("#mfaBlok"));
   $("#foto").onchange = async e => {
     const bestand = e.target.files[0];
     if (!bestand) return;
@@ -1031,9 +1164,11 @@ ${S.ik.naam}`;
 function admDeelnemers(box) {
   box.innerHTML = S.deelnemers.map(d => {
     const status = d.user_id ? "Heeft een account" : d.email ? "Uitgenodigd, nog geen account" : "Nog geen e-mailadres";
+    const mfa = S.metMfa.has(d.id);
     return `<form class="vlak" data-d="${d.id}">
       <div class="persoon">${avatar(d.id, 36)}
-        <span><b>${esc(d.naam)}</b><br><span class="klein muted">${status}</span></span></div>
+        <span><b>${esc(d.naam)}</b><br><span class="klein muted">${status}</span>
+          ${mfa ? ` <span class="label tweestap">Tweestap aan</span>` : d.is_beheerder && d.user_id ? ` <span class="label let">Tweestap nog niet ingesteld</span>` : ""}</span></div>
       <div class="rij">
         <label class="veld"><span>E-mailadres</span><input name="email" type="email" value="${esc(d.email || "")}" ${d.user_id ? "readonly" : ""}></label>
         <label class="veld" style="max-width:120px"><span>Inleg</span><input name="inleg" inputmode="decimal" value="${String(d.inleg).replace(".", ",")}"></label>
@@ -1045,6 +1180,7 @@ function admDeelnemers(box) {
       <div class="knoppen">
         <button class="knop">Opslaan</button>
         ${!d.user_id ? `<button type="button" class="knop licht" data-nodig="${d.id}">Opslaan en uitnodigen</button>` : ""}
+        ${mfa && d.id !== S.ik.id ? `<button type="button" class="tekstknop" data-mfauit="${d.id}">Tweestapsverificatie uitzetten</button>` : ""}
       </div>
     </form>`;
   }).join("") + `
@@ -1075,6 +1211,14 @@ function admDeelnemers(box) {
     await verversEnToon();
     if (ookUitnodigen) uitnodigen({ ...d, email });
   };
+  box.querySelectorAll("[data-mfauit]").forEach(b => (b.onclick = async () => {
+    const d = deelnemer(b.dataset.mfauit);
+    if (!confirm(`Tweestapsverificatie van ${d.naam} uitzetten? Doe dit alleen als ${d.naam} zijn telefoon kwijt is.`)) return;
+    const { error } = await sb.rpc("beheer_mfa_uit", { p_deelnemer: d.id });
+    if (error) return fout(error, "Uitzetten");
+    toast(`Tweestapsverificatie van ${d.naam} staat uit`);
+    verversEnToon();
+  }));
   box.querySelectorAll("form[data-d]").forEach(f => {
     f.onsubmit = e => { e.preventDefault(); opslaan(f, false); };
     f.querySelector("[data-nodig]")?.addEventListener("click", () => opslaan(f, true));
