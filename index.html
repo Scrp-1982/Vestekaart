@@ -1,0 +1,975 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#C8102E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vestekaart">
+<title>Vestekaart</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
+<style>
+:root {
+  --rood: #C8102E;
+  --rood-donker: #9E0B23;
+  --inkt: #23262E;
+  --grijs: #6B7180;
+  --lijn: #DDE0E6;
+  --vlak: #FFFFFF;
+  --achter: #EEF0F3;
+  --goud: #E8A317;
+  --groen: #1F8A5B;
+  --tekst-op-rood: #FFFFFF;
+  --kop: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --romp: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --inkt: #E9EBF0;
+    --grijs: #9BA1AE;
+    --lijn: #353944;
+    --vlak: #22252D;
+    --achter: #17191F;
+    --groen: #3DBE85;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: var(--romp);
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--inkt);
+  background: var(--achter);
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  -webkit-text-size-adjust: 100%;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--rood); }
+h1, h2, h3 { font-family: var(--kop); font-weight: 600; letter-spacing: .01em; line-height: 1.1; margin: 0; }
+h2 { font-size: 1.6rem; }
+h3 { font-size: 1.25rem; }
+.muted { color: var(--grijs); }
+.klein { font-size: .875rem; }
+.getal { font-family: var(--kop); font-variant-numeric: tabular-nums; font-weight: 600; }
+.rechts { text-align: right; }
+:focus-visible { outline: 3px solid var(--goud); outline-offset: 2px; }
+
+/* Kop */
+header.balk {
+  background: var(--rood);
+  color: var(--tekst-op-rood);
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px;
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 12px;
+}
+header.balk h1 { font-size: 1.5rem; flex: 1; }
+header.balk .terug {
+  background: none; border: 0; color: inherit; font-size: 1.5rem; line-height: 1;
+  padding: 4px 8px 4px 0; cursor: pointer;
+}
+main { max-width: 640px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+
+/* Onderbalk */
+nav.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  background: var(--vlak); border-top: 1px solid var(--lijn);
+  display: flex; justify-content: center;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+nav.tabs a {
+  flex: 1; max-width: 160px; text-align: center; text-decoration: none; color: var(--grijs);
+  padding: 10px 4px 12px; font-family: var(--kop); font-size: 1.05rem; font-weight: 600;
+  border-top: 3px solid transparent;
+}
+nav.tabs a.aan { color: var(--rood); border-top-color: var(--rood); }
+
+/* De kaart */
+.kaart {
+  background: var(--rood);
+  background-image: radial-gradient(circle at 110% -20%, rgba(255,255,255,.18) 0 40%, transparent 41%);
+  color: var(--tekst-op-rood);
+  border-radius: 18px;
+  padding: 20px 20px 18px;
+  aspect-ratio: 1.586 / 1;
+  max-height: 260px;
+  width: 100%;
+  display: flex; flex-direction: column; justify-content: space-between;
+  box-shadow: 0 10px 24px -12px rgba(158, 11, 35, .7);
+}
+.kaart .naam { font-family: var(--kop); font-size: 1.15rem; font-weight: 600; opacity: .9; }
+.kaart .saldo { font-family: var(--kop); font-size: clamp(2.6rem, 12vw, 3.6rem); font-weight: 700; line-height: 1; }
+.kaart .onder { display: flex; justify-content: space-between; gap: 12px; font-size: .9rem; }
+.kaart .onder b { font-family: var(--kop); font-size: 1.15rem; display: block; }
+
+/* Vlakken en lijsten */
+.vlak { background: var(--vlak); border-radius: 12px; padding: 16px; display: grid; gap: 12px; }
+.vlak > h3 { margin-bottom: -2px; }
+.status { border-radius: 10px; padding: 12px 14px; font-size: .95rem; }
+.status.goed { background: color-mix(in srgb, var(--groen) 14%, var(--vlak)); }
+.status.let { background: color-mix(in srgb, var(--goud) 22%, var(--vlak)); }
+ul.lijst { list-style: none; margin: 0; padding: 0; }
+ul.lijst > li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--lijn); }
+ul.lijst > li:first-child { border-top: 0; }
+ul.lijst .groei { flex: 1; min-width: 0; }
+.stip { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.letters {
+  width: 30px; height: 30px; border-radius: 50%; flex: none; color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--kop); font-weight: 700; font-size: .95rem;
+}
+.open { color: var(--rood); }
+@media (prefers-color-scheme: dark) { .open { color: #FF6B7D; } }
+
+/* Wedstrijden als kaartjes met een scheurlijn */
+.ticket {
+  display: grid; grid-template-columns: 64px 1fr auto; align-items: center;
+  background: var(--vlak); border-radius: 12px; text-decoration: none; color: inherit;
+  position: relative; min-height: 64px;
+}
+.ticket .dag {
+  text-align: center; font-family: var(--kop); line-height: 1; padding: 10px 0;
+  border-right: 2px dashed var(--lijn); height: 100%;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.ticket .dag b { font-size: 1.6rem; display: block; }
+.ticket .dag span { font-size: .85rem; color: var(--grijs); }
+.ticket .wie { padding: 10px 12px; min-width: 0; }
+.ticket .wie b { font-family: var(--kop); font-size: 1.2rem; font-weight: 600; display: block; }
+.ticket .bedrag { padding: 10px 14px 10px 0; text-align: right; }
+.ticket::before, .ticket::after {
+  content: ""; position: absolute; left: 57px; width: 14px; height: 7px; background: var(--achter);
+}
+.ticket::before { top: 0; border-radius: 0 0 7px 7px; }
+.ticket::after { bottom: 0; border-radius: 7px 7px 0 0; }
+.tickets { display: grid; gap: 8px; }
+
+/* Bon van een aankoop */
+.bon { background: var(--vlak); border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; }
+.bon-kop { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.bon-kop b { font-family: var(--kop); font-size: 1.25rem; }
+.verdeling { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--lijn); }
+.verdeling span { display: block; height: 100%; }
+.regel { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.regel .groei { flex: 1; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 4px 3px 10px;
+  color: #fff; font-size: .875rem; font-weight: 600;
+}
+.chip button { background: rgba(0,0,0,.18); color: #fff; border: 0; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; line-height: 1; }
+.chip.zonder { padding-right: 10px; }
+
+/* Knoppen en velden */
+.knop {
+  background: var(--rood); color: #fff; border: 0; border-radius: 10px;
+  padding: 10px 16px; font-weight: 600; cursor: pointer; min-height: 42px;
+}
+.knop:hover { background: var(--rood-donker); }
+.knop.licht { background: transparent; color: var(--rood); box-shadow: inset 0 0 0 2px var(--rood); }
+.knop.klein { padding: 6px 12px; min-height: 34px; font-size: .9rem; }
+.knop[disabled] { opacity: .5; cursor: default; }
+@media (prefers-color-scheme: dark) { .knop.licht { color: #FF6B7D; box-shadow: inset 0 0 0 2px #FF6B7D; } }
+.veld { display: grid; gap: 4px; }
+.veld > span { font-size: .875rem; color: var(--grijs); }
+input, select, textarea {
+  width: 100%; border: 1px solid var(--lijn); background: var(--vlak); border-radius: 10px;
+  padding: 10px 12px; min-height: 42px;
+}
+textarea { min-height: 90px; resize: vertical; }
+.rij { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.rij > * { flex: 1; min-width: 120px; }
+.rij > .knop { flex: none; }
+.seg { display: flex; background: var(--vlak); border-radius: 10px; padding: 4px; gap: 4px; overflow-x: auto; }
+.seg a, .seg button {
+  flex: 1; text-align: center; border: 0; background: none; padding: 8px 6px; border-radius: 8px; font-size: .95rem;
+  text-decoration: none; color: var(--grijs); font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.seg .aan { background: var(--rood); color: #fff; }
+.stapel { display: grid; gap: 12px; }
+.drie { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.drie b { font-size: 1.35rem; display: block; }
+.knoppen { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.persoon { display: flex; gap: 10px; align-items: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.claimrij { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: end; }
+.tekstknop { background: none; border: 0; padding: 4px 0; color: var(--grijs); text-decoration: underline; cursor: pointer; justify-self: start; font-size: .875rem; }
+.leeg { text-align: center; padding: 24px 16px; }
+pre.verslag { white-space: pre-wrap; font-size: .85rem; margin: 0; background: var(--achter); padding: 10px; border-radius: 8px; overflow-x: auto; }
+
+/* Melding */
+#toast {
+  position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  background: var(--inkt); color: var(--achter); padding: 10px 16px; border-radius: 10px; z-index: 20;
+  max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgba(0,0,0,.25); display: none;
+}
+
+/* Inloggen */
+.welkom { display: grid; gap: 16px; padding-top: 8px; }
+.welkom .kaart { max-height: 220px; }
+</style>
+</head>
+<body>
+<header class="balk"><button class="terug" id="terug" hidden aria-label="Terug">‹</button><h1 id="titel">Vestekaart</h1></header>
+<main id="scherm"><p class="muted">Laden…</p></main>
+<nav class="tabs" id="tabs" hidden></nav>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+// =====================================================================
+// Vestekaart – app
+// =====================================================================
+const VERSIE = "2026-11-09.1";
+const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
+const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
+const APP_URL = "https://vestekaart.mhavers.nl/";
+const KLEUREN = ["#2F6FDE", "#E8A317", "#1F8A5B", "#8B5CF6", "#E4572E", "#0EA5B7", "#D946A8", "#64748B"];
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const $ = s => document.querySelector(s);
+const scherm = () => $("#scherm");
+
+const S = {
+  user: null, ik: null, deelnemers: [], saldo: [], wedstrijden: [], pot: null,
+  transacties: [], regels: [], claims: [], betalingen: [], instellingen: {},
+  alsId: null, wedFilter: "gespeeld",
+};
+
+// ---------------------------------------------------------------------
+// Hulpjes
+// ---------------------------------------------------------------------
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const euroFmt = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" });
+const euro = n => euroFmt.format(Number(n) || 0);
+const centen = n => Math.round((Number(n) || 0) * 100);
+const leesBedrag = s => {
+  const t = String(s ?? "").replace(/[€\s]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
+  const n = Number(t);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : NaN;
+};
+const vandaag = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Amsterdam" }).format(new Date());
+const dt = d => new Date(d + "T12:00:00");
+const datumKort = d => dt(d).toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" });
+const datumLang = d => dt(d).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const tijd = t => t ? String(t).slice(0, 5) : "";
+
+function toast(tekst) {
+  const t = $("#toast");
+  t.textContent = tekst;
+  t.style.display = "block";
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (t.style.display = "none"), 3500);
+}
+function fout(e, wat) {
+  console.error(e);
+  const m = e?.message || String(e);
+  toast(`${wat} lukte niet: ${m}`);
+}
+function titel(tekst, terug) {
+  $("#titel").textContent = tekst;
+  const k = $("#terug");
+  k.hidden = !terug;
+  k.onclick = () => (location.hash = terug);
+}
+const deelnemer = id => S.deelnemers.find(d => d.id === id);
+const kleur = id => {
+  const i = S.deelnemers.findIndex(d => d.id === id);
+  return KLEUREN[(i < 0 ? 0 : i) % KLEUREN.length];
+};
+const letters = id => (deelnemer(id)?.naam || "?").slice(0, 2);
+const isBeheerder = () => !!S.ik?.is_beheerder;
+
+// ---------------------------------------------------------------------
+// Gegevens laden
+// ---------------------------------------------------------------------
+async function laad() {
+  const r = await Promise.all([
+    sb.from("deelnemers").select("*").order("volgorde").order("naam"),
+    sb.from("v_saldo_deelnemers").select("*"),
+    sb.from("v_wedstrijden").select("*").order("datum").order("aanvang", { nullsFirst: false }),
+    sb.from("v_pot").select("*").single(),
+    sb.from("transacties").select("*").order("datum").order("tijd", { nullsFirst: true }).order("created_at"),
+    sb.from("transactie_regels").select("*").order("volgorde"),
+    sb.from("claims").select("*").order("created_at"),
+    sb.from("betalingen").select("*").order("datum", { ascending: false }).order("created_at", { ascending: false }),
+    sb.from("instellingen").select("*"),
+  ]);
+  const mis = r.find(x => x.error);
+  if (mis) throw mis.error;
+  [S.deelnemers, S.saldo, S.wedstrijden, S.pot, S.transacties, S.regels, S.claims, S.betalingen] = r.slice(0, 8).map(x => x.data);
+  S.instellingen = Object.fromEntries(r[8].data.map(i => [i.sleutel, i.waarde]));
+  S.ik = S.deelnemers.find(d => d.user_id === S.user.id) || null;
+  if (!S.alsId || !deelnemer(S.alsId)) S.alsId = S.ik?.id || null;
+}
+async function verversEnToon() {
+  try { await laad(); } catch (e) { return fout(e, "Gegevens laden"); }
+  route();
+}
+
+// ---------------------------------------------------------------------
+// Inloggen
+// ---------------------------------------------------------------------
+async function start() {
+  sb.auth.onAuthStateChange(ev => {
+    if (ev === "SIGNED_OUT") { S.user = null; S.ik = null; toonInloggen(); }
+  });
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) await naInloggen(session.user);
+  else toonInloggen();
+}
+
+async function naInloggen(user) {
+  S.user = user;
+  try {
+    await sb.rpc("koppel_mij");
+    await laad();
+  } catch (e) {
+    scherm().innerHTML = `<div class="vlak"><p>De gegevens konden niet worden geladen: ${esc(e.message || e)}</p>
+      <button class="knop" onclick="location.reload()">Opnieuw proberen</button></div>`;
+    return;
+  }
+  if (!S.ik) {
+    titel("Vestekaart");
+    scherm().innerHTML = `<div class="vlak"><h3>Account niet gekoppeld</h3>
+      <p>Je bent ingelogd als ${esc(user.email)}, maar dit adres hoort niet bij een deelnemer. Vraag Mike om je e-mailadres in Beheer te zetten.</p>
+      <button class="knop licht" id="uit">Uitloggen</button></div>`;
+    $("#uit").onclick = () => sb.auth.signOut();
+    return;
+  }
+  bouwTabs();
+  window.onhashchange = route;
+  route();
+}
+
+function authFout(e) {
+  const m = e?.message || "";
+  if (/database error|niet bij een deelnemer/i.test(m)) return "Dit e-mailadres hoort niet bij een deelnemer. Vraag Mike om een uitnodiging.";
+  if (/invalid login/i.test(m)) return "E-mailadres of wachtwoord klopt niet.";
+  if (/already registered|already been registered/i.test(m)) return "Er bestaat al een account met dit e-mailadres. Kies Inloggen.";
+  if (/password/i.test(m)) return "Kies een wachtwoord van minstens 8 tekens.";
+  return "Dat lukte niet: " + m;
+}
+
+function toonInloggen(modus = "inloggen") {
+  $("#tabs").hidden = true;
+  titel("Vestekaart");
+  window.onhashchange = null;
+  scherm().innerHTML = `
+    <section class="welkom">
+      <div class="kaart">
+        <div class="naam">Vestekaart</div>
+        <div class="saldo">Zes man, één kaart</div>
+        <div class="onder"><span>Wie dronk wat, en wie betaalt wat.</span></div>
+      </div>
+      <div class="seg" role="tablist">
+        <button type="button" data-modus="inloggen" class="${modus === "inloggen" ? "aan" : ""}">Inloggen</button>
+        <button type="button" data-modus="account" class="${modus === "account" ? "aan" : ""}">Account maken</button>
+      </div>
+      <form id="authForm" class="vlak">
+        ${modus === "account" ? `<p class="muted klein">Gebruik het e-mailadres waarop je de uitnodiging kreeg.</p>` : ""}
+        <label class="veld"><span>E-mailadres</span><input name="email" type="email" required autocomplete="email"></label>
+        <label class="veld"><span>Wachtwoord${modus === "account" ? " (minstens 8 tekens)" : ""}</span>
+          <input name="pw" type="password" required minlength="${modus === "account" ? 8 : 1}" autocomplete="${modus === "account" ? "new-password" : "current-password"}"></label>
+        <button class="knop">${modus === "account" ? "Account maken" : "Inloggen"}</button>
+      </form>
+    </section>`;
+  scherm().querySelectorAll("[data-modus]").forEach(b => (b.onclick = () => toonInloggen(b.dataset.modus)));
+  $("#authForm").onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const email = String(f.get("email")).trim().toLowerCase();
+    const password = String(f.get("pw"));
+    const knop = e.target.querySelector("button");
+    knop.disabled = true;
+    const { data, error } = modus === "account"
+      ? await sb.auth.signUp({ email, password })
+      : await sb.auth.signInWithPassword({ email, password });
+    knop.disabled = false;
+    if (error) return toast(authFout(error));
+    if (data.session) naInloggen(data.session.user);
+    else toast("Account gemaakt. Log nu in.");
+  };
+}
+
+// ---------------------------------------------------------------------
+// Navigatie
+// ---------------------------------------------------------------------
+function bouwTabs() {
+  const t = [["overzicht", "Overzicht"], ["wedstrijden", "Wedstrijden"], ["mijn", "Mijn"]];
+  if (isBeheerder()) t.push(["beheer", "Beheer"]);
+  $("#tabs").innerHTML = t.map(([k, l]) => `<a href="#${k}" data-tab="${k}">${l}</a>`).join("");
+  $("#tabs").hidden = false;
+}
+function markeerTab(k) {
+  document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("aan", a.dataset.tab === k));
+}
+function route() {
+  if (!S.ik) return;
+  const [pad, arg] = (location.hash.slice(1) || "overzicht").split("/");
+  window.scrollTo(0, 0);
+  if (pad === "wedstrijd" && arg) { markeerTab("wedstrijden"); return toonWedstrijd(arg); }
+  if (pad === "wedstrijden") { markeerTab("wedstrijden"); return toonWedstrijden(); }
+  if (pad === "mijn") { markeerTab("mijn"); return toonMijn(); }
+  if (pad === "beheer" && isBeheerder()) { markeerTab("beheer"); return toonBeheer(arg || "deelnemers"); }
+  markeerTab("overzicht");
+  toonOverzicht();
+}
+
+// ---------------------------------------------------------------------
+// Overzicht
+// ---------------------------------------------------------------------
+function ticket(w) {
+  const d = dt(w.datum);
+  const gespeeld = w.datum < vandaag();
+  const rechts = Number(w.kosten) > 0
+    ? `<span class="getal">${euro(w.kosten)}</span>${Number(w.open) > 0 ? `<br><span class="klein open">${euro(w.open)} open</span>` : ""}`
+    : gespeeld ? `<span class="klein muted">geen kosten</span>`
+    : `<span class="klein muted">${w.datum_voorlopig ? "datum voorlopig" : tijd(w.aanvang)}</span>`;
+  return `<a class="ticket" href="#wedstrijd/${w.id}">
+    <div class="dag"><b>${d.getDate()}</b><span>${d.toLocaleDateString("nl-NL", { month: "short" })}</span></div>
+    <div class="wie"><b>${esc(w.tegenstander)}</b><span class="klein muted">${esc(w.competitie || "")}</span></div>
+    <div class="bedrag">${rechts}</div></a>`;
+}
+
+function toonOverzicht() {
+  titel("Vestekaart");
+  const p = S.pot || {};
+  const inleg = Number(p.inleg);
+  const compleet = centen(p.saldo_totaal) === centen(inleg) && centen(p.niet_geclaimd) === 0;
+  const volgende = S.wedstrijden.find(w => w.datum >= vandaag());
+  const aandacht = S.wedstrijden.filter(w => Number(w.open) > 0);
+  const rijen = S.deelnemers.filter(d => d.actief).map(d => {
+    const s = S.saldo.find(x => x.id === d.id) || {};
+    return `<li><span class="stip" style="background:${kleur(d.id)}"></span>
+      <span class="groei">${esc(d.naam)}<br><span class="klein muted">verbruikt ${euro(s.verbruikt)}</span></span>
+      <span class="rechts">${Number(s.openstaand) > 0
+        ? `<span class="getal open">${euro(s.openstaand)}</span><br><span class="klein muted">over te maken</span>`
+        : `<span class="klein muted">alles betaald</span>`}</span></li>`;
+  }).join("");
+
+  scherm().innerHTML = `
+    <div class="kaart">
+      <div class="naam">Op de Vestekaart</div>
+      <div class="saldo">${euro(p.saldo_kaart)}</div>
+      <div class="onder">
+        <span>Op de rekening<b>${euro(p.saldo_rekening)}</b></span>
+        <span class="rechts">Samen<b>${euro(p.saldo_totaal)}</b></span>
+      </div>
+    </div>
+    ${compleet
+      ? `<div class="status goed">De pot is compleet: kaart en rekening zijn samen precies de inleg van ${euro(inleg)}.</div>`
+      : `<div class="status let">${centen(p.niet_geclaimd) > 0 ? `Er is nog ${euro(p.niet_geclaimd)} niet toegewezen. ` : ""}${centen(p.nog_over_te_maken) > 0 ? `Er moet nog ${euro(p.nog_over_te_maken)} worden overgemaakt. ` : ""}Daarna is de pot weer ${euro(inleg)}.</div>`}
+    ${aandacht.length ? `<div class="stapel"><h3>Nog niet verdeeld</h3><div class="tickets">${aandacht.slice().reverse().map(ticket).join("")}</div></div>` : ""}
+    <div class="vlak"><h3>Per persoon</h3><ul class="lijst">${rijen}</ul></div>
+    ${volgende ? `<div class="stapel"><h3>Volgende thuiswedstrijd</h3>${ticket(volgende)}</div>` : ""}`;
+}
+
+// ---------------------------------------------------------------------
+// Wedstrijden
+// ---------------------------------------------------------------------
+function toonWedstrijden() {
+  titel("Wedstrijden");
+  const nu = vandaag();
+  const gespeeld = S.wedstrijden.filter(w => w.datum < nu).reverse();
+  const komend = S.wedstrijden.filter(w => w.datum >= nu);
+  const lijst = S.wedFilter === "komend" ? komend : gespeeld;
+  scherm().innerHTML = `
+    <div class="seg">
+      <button data-f="gespeeld" class="${S.wedFilter === "gespeeld" ? "aan" : ""}">Gespeeld (${gespeeld.length})</button>
+      <button data-f="komend" class="${S.wedFilter === "komend" ? "aan" : ""}">Komend (${komend.length})</button>
+    </div>
+    <div class="tickets">${lijst.map(ticket).join("") || `<p class="leeg muted">Geen wedstrijden.</p>`}</div>`;
+  scherm().querySelectorAll("[data-f]").forEach(b => (b.onclick = () => { S.wedFilter = b.dataset.f; toonWedstrijden(); }));
+}
+
+function verdelingBalk(t, claims) {
+  const totaal = Number(t.bedrag);
+  const perPersoon = {};
+  claims.forEach(c => (perPersoon[c.deelnemer_id] = (perPersoon[c.deelnemer_id] || 0) + Number(c.bedrag)));
+  return `<div class="verdeling" aria-hidden="true">${Object.entries(perPersoon)
+    .map(([id, b]) => `<span style="width:${(b / totaal) * 100}%;background:${kleur(id)}"></span>`).join("")}</div>`;
+}
+
+function chip(c, magWeg) {
+  const d = deelnemer(c.deelnemer_id);
+  return `<span class="chip ${magWeg ? "" : "zonder"}" style="background:${kleur(c.deelnemer_id)}">${esc(d?.naam || "?")}${c.regel_id ? "" : ` ${euro(c.bedrag)}`}${
+    magWeg ? `<button data-weg="${c.id}" aria-label="Claim van ${esc(d?.naam)} weghalen">×</button>` : ""}</span>`;
+}
+
+function toonWedstrijd(id) {
+  const w = S.wedstrijden.find(x => x.id === id);
+  if (!w) { location.hash = "wedstrijden"; return; }
+  titel(w.tegenstander, "wedstrijden");
+  const aankopen = S.transacties.filter(t => t.wedstrijd_id === id && t.soort === "aankoop");
+  const magWeg = c => isBeheerder() || c.deelnemer_id === S.ik.id;
+  const als = deelnemer(S.alsId) || S.ik;
+
+  const bonnen = aankopen.map(t => {
+    const regels = S.regels.filter(r => r.transactie_id === t.id);
+    const claims = S.claims.filter(c => c.transactie_id === t.id);
+    const vrij = Number(t.bedrag) - claims.reduce((s, c) => s + Number(c.bedrag), 0);
+    const regelHtml = regels.map(r => {
+      const c = claims.find(x => x.regel_id === r.id);
+      return `<div class="regel"><span class="groei">${esc(r.omschrijving)}</span><span class="getal">${euro(r.bedrag)}</span>
+        ${c ? chip(c, magWeg(c)) : `<button class="knop klein licht" data-regel="${r.id}" data-t="${t.id}">${als.id === S.ik.id ? "Van mij" : `Voor ${esc(als.naam)}`}</button>`}</div>`;
+    }).join("");
+    const losse = claims.filter(c => !c.regel_id);
+    const kop = [t.kassa ? esc(t.kassa) : (t.bron === "spreadsheet" ? "Totaal uit de spreadsheet" : "Aankoop"), tijd(t.tijd)].filter(Boolean).join(", ");
+    return `<article class="bon">
+      <div class="bon-kop"><span class="klein muted">${kop}</span><b class="getal">${euro(t.bedrag)}</b></div>
+      ${verdelingBalk(t, claims)}
+      ${regelHtml}
+      ${losse.length ? `<div class="chips">${losse.map(c => chip(c, magWeg(c))).join("")}</div>` : ""}
+      ${centen(vrij) > 0 ? `<form class="claimrij" data-claim="${t.id}">
+          <label class="veld"><span>Nog vrij: ${euro(vrij)}${als.id === S.ik.id ? "" : `, claimen voor ${esc(als.naam)}`}</span>
+            <input name="bedrag" inputmode="decimal" placeholder="Bedrag" required></label>
+          <button class="knop">Claimen</button>
+          <button type="button" class="knop licht" data-rest="${t.id}" data-vrij="${vrij.toFixed(2)}">Alles</button>
+        </form>` : `<span class="klein muted">Helemaal verdeeld.</span>`}
+      ${isBeheerder() ? `<button type="button" class="tekstknop" data-wegt="${t.id}">Aankoop verwijderen</button>` : ""}
+    </article>`;
+  }).join("");
+
+  scherm().innerHTML = `
+    <div class="vlak">
+      <div><h2>FC Twente – ${esc(w.tegenstander)}</h2>
+        <span class="muted">${datumLang(w.datum)}${w.aanvang ? `, ${tijd(w.aanvang)}` : ""}${w.datum_voorlopig ? " (voorlopig)" : ""}${w.competitie ? `, ${esc(w.competitie)}` : ""}</span></div>
+      <div class="drie">
+        <span class="klein muted">Kosten<b class="getal" style="color:var(--inkt)">${euro(w.kosten)}</b></span>
+        <span class="klein muted">Verdeeld<b class="getal" style="color:var(--inkt)">${euro(w.geclaimd)}</b></span>
+        <span class="klein muted">Open<b class="getal ${Number(w.open) > 0 ? "open" : ""}" style="${Number(w.open) > 0 ? "" : "color:var(--inkt)"}">${euro(w.open)}</b></span>
+      </div>
+      ${isBeheerder() && aankopen.length ? `<label class="veld"><span>Claimen als</span>
+        <select id="als">${S.deelnemers.filter(d => d.actief).map(d => `<option value="${d.id}" ${d.id === als.id ? "selected" : ""}>${esc(d.naam)}</option>`).join("")}</select></label>` : ""}
+    </div>
+    ${bonnen || `<div class="vlak leeg"><p class="muted">Nog geen aankopen bij deze wedstrijd.</p>
+      ${isBeheerder() ? `<a class="knop" href="#beheer/kaart" style="justify-self:center;text-decoration:none">Aankoop toevoegen</a>` : ""}</div>`}`;
+
+  const s = scherm();
+  $("#als")?.addEventListener("change", e => { S.alsId = e.target.value; toonWedstrijd(id); });
+  s.querySelectorAll("[data-regel]").forEach(b => (b.onclick = async () => {
+    const r = S.regels.find(x => x.id === b.dataset.regel);
+    b.disabled = true;
+    const { error } = await sb.from("claims").insert({ transactie_id: b.dataset.t, deelnemer_id: als.id, regel_id: r.id, bedrag: r.bedrag });
+    if (error) { b.disabled = false; return fout(error, "Claimen"); }
+    verversEnToon();
+  }));
+  s.querySelectorAll("form[data-claim]").forEach(f => (f.onsubmit = async e => {
+    e.preventDefault();
+    const bedrag = leesBedrag(new FormData(f).get("bedrag"));
+    if (!(bedrag > 0)) return toast("Vul een bedrag in, bijvoorbeeld 5,90.");
+    const { error } = await sb.from("claims").insert({ transactie_id: f.dataset.claim, deelnemer_id: als.id, bedrag });
+    if (error) return fout(error, "Claimen");
+    verversEnToon();
+  }));
+  s.querySelectorAll("[data-rest]").forEach(b => (b.onclick = async () => {
+    const { error } = await sb.from("claims").insert({ transactie_id: b.dataset.rest, deelnemer_id: als.id, bedrag: Number(b.dataset.vrij) });
+    if (error) return fout(error, "Claimen");
+    verversEnToon();
+  }));
+  s.querySelectorAll("[data-weg]").forEach(b => (b.onclick = async () => {
+    const { error } = await sb.from("claims").delete().eq("id", b.dataset.weg);
+    if (error) return fout(error, "Weghalen");
+    verversEnToon();
+  }));
+  s.querySelectorAll("[data-wegt]").forEach(b => (b.onclick = async () => {
+    if (!confirm("Deze aankoop en alle claims erop verwijderen?")) return;
+    const { error } = await sb.from("transacties").delete().eq("id", b.dataset.wegt);
+    if (error) return fout(error, "Verwijderen");
+    verversEnToon();
+  }));
+}
+
+// ---------------------------------------------------------------------
+// Mijn
+// ---------------------------------------------------------------------
+function toonMijn() {
+  titel(S.ik.naam);
+  const s = S.saldo.find(x => x.id === S.ik.id) || {};
+  const mijnClaims = S.claims.filter(c => c.deelnemer_id === S.ik.id);
+  const perWedstrijd = S.wedstrijden.map(w => {
+    const ids = new Set(S.transacties.filter(t => t.wedstrijd_id === w.id).map(t => t.id));
+    const som = mijnClaims.filter(c => ids.has(c.transactie_id)).reduce((a, c) => a + Number(c.bedrag), 0);
+    return { w, som };
+  }).filter(x => x.som > 0).reverse();
+  const mijnBet = S.betalingen.filter(b => b.deelnemer_id === S.ik.id);
+  const open = Number(s.openstaand) - Number(s.gemeld || 0);
+
+  scherm().innerHTML = `
+    <div class="vlak">
+      <div class="drie">
+        <span class="klein muted">Verbruikt<b class="getal" style="color:var(--inkt)">${euro(s.verbruikt)}</b></span>
+        <span class="klein muted">Overgemaakt<b class="getal" style="color:var(--inkt)">${euro(s.overgemaakt)}</b></span>
+        <span class="klein muted">Open<b class="getal ${Number(s.openstaand) > 0 ? "open" : ""}" style="${Number(s.openstaand) > 0 ? "" : "color:var(--inkt)"}">${euro(s.openstaand)}</b></span>
+      </div>
+      ${Number(s.gemeld) > 0 ? `<p class="klein muted">${euro(s.gemeld)} gemeld als overgemaakt, wacht op bevestiging van Mike.</p>` : ""}
+    </div>
+    ${centen(open) > 0 ? `<form class="vlak" id="meld">
+      <h3>Overboeking melden</h3>
+      <p class="klein muted">Heb je je verbruik overgemaakt naar de rekening? Meld het hier; Mike bevestigt het zodra het binnen is.</p>
+      <div class="rij">
+        <label class="veld"><span>Bedrag</span><input name="bedrag" inputmode="decimal" value="${open.toFixed(2).replace(".", ",")}" required></label>
+        <label class="veld"><span>Datum</span><input name="datum" type="date" value="${vandaag()}" required></label>
+      </div>
+      <button class="knop">Overboeking melden</button></form>` : ""}
+    <div class="vlak"><h3>Mijn verbruik per wedstrijd</h3>
+      ${perWedstrijd.length ? `<ul class="lijst">${perWedstrijd.map(({ w, som }) => `<li>
+        <a class="groei" href="#wedstrijd/${w.id}">${esc(w.tegenstander)}</a>
+        <span class="klein muted">${datumKort(w.datum)}</span><span class="getal">${euro(som)}</span></li>`).join("")}</ul>`
+        : `<p class="muted">Nog niets geclaimd. Open een wedstrijd en tik aan wat van jou was.</p>`}
+    </div>
+    <div class="vlak"><h3>Mijn overboekingen</h3>
+      ${mijnBet.length ? `<ul class="lijst">${mijnBet.map(b => `<li>
+        <span class="groei">${datumKort(b.datum)}<br><span class="klein muted">${b.bevestigd ? "bevestigd" : "wacht op bevestiging"}</span></span>
+        <span class="getal">${euro(b.bedrag)}</span>
+        ${!b.bevestigd ? `<button class="knop klein licht" data-intrek="${b.id}">Intrekken</button>` : ""}</li>`).join("")}</ul>`
+        : `<p class="muted">Nog geen overboekingen.</p>`}
+    </div>
+    <form class="vlak" id="pw">
+      <h3>Account</h3>
+      <p class="klein muted">Ingelogd als ${esc(S.user.email)}</p>
+      <label class="veld"><span>Nieuw wachtwoord (minstens 8 tekens)</span><input name="pw" type="password" minlength="8" autocomplete="new-password" required></label>
+      <div class="knoppen"><button class="knop">Wachtwoord wijzigen</button><button type="button" class="knop licht" id="uit">Uitloggen</button></div>
+      <p class="klein muted">Versie ${VERSIE}</p>
+    </form>`;
+
+  $("#meld")?.addEventListener("submit", async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const bedrag = leesBedrag(f.get("bedrag"));
+    if (!(bedrag > 0)) return toast("Vul een bedrag in.");
+    const { error } = await sb.from("betalingen").insert({ deelnemer_id: S.ik.id, bedrag, datum: f.get("datum") });
+    if (error) return fout(error, "Melden");
+    toast("Overboeking gemeld");
+    verversEnToon();
+  });
+  scherm().querySelectorAll("[data-intrek]").forEach(b => (b.onclick = async () => {
+    const { error } = await sb.from("betalingen").delete().eq("id", b.dataset.intrek);
+    if (error) return fout(error, "Intrekken");
+    verversEnToon();
+  }));
+  $("#pw").onsubmit = async e => {
+    e.preventDefault();
+    const { error } = await sb.auth.updateUser({ password: String(new FormData(e.target).get("pw")) });
+    if (error) return fout(error, "Wachtwoord wijzigen");
+    e.target.reset();
+    toast("Wachtwoord gewijzigd");
+  };
+  $("#uit").onclick = () => sb.auth.signOut();
+}
+
+// ---------------------------------------------------------------------
+// Beheer
+// ---------------------------------------------------------------------
+function toonBeheer(sub) {
+  titel("Beheer");
+  const subs = [["deelnemers", "Deelnemers"], ["betalingen", "Betalingen"], ["kaart", "Kaart"], ["programma", "Programma"]];
+  scherm().innerHTML = `<nav class="seg">${subs.map(([k, l]) => `<a href="#beheer/${k}" class="${k === sub ? "aan" : ""}">${l}</a>`).join("")}</nav>
+    <div id="adm" class="stapel"></div>`;
+  const box = $("#adm");
+  if (sub === "betalingen") return admBetalingen(box);
+  if (sub === "kaart") return admKaart(box);
+  if (sub === "programma") return admProgramma(box);
+  return admDeelnemers(box);
+}
+
+function uitnodigen(d) {
+  const onderwerp = "Doe je mee met de Vestekaart-app?";
+  const tekst = `Hoi ${d.naam},
+
+Ik heb een app gemaakt voor onze Vestekaart. Per wedstrijd zie je wat er van de kaart is betaald, en tik je zelf aan wat van jou was. Ook zie je wat je nog moet overmaken.
+
+Zo doe je mee:
+1. Ga naar ${APP_URL}
+2. Kies Account maken
+3. Gebruik dit e-mailadres: ${d.email}
+4. Kies een wachtwoord
+
+Tip: zet de app via Delen > Zet op beginscherm op je telefoon.
+
+Groet,
+${S.ik.naam}`;
+  location.href = `mailto:${encodeURIComponent(d.email)}?subject=${encodeURIComponent(onderwerp)}&body=${encodeURIComponent(tekst)}`;
+}
+
+function admDeelnemers(box) {
+  box.innerHTML = S.deelnemers.map(d => {
+    const status = d.user_id ? "Heeft een account" : d.email ? "Uitgenodigd, nog geen account" : "Nog geen e-mailadres";
+    return `<form class="vlak" data-d="${d.id}">
+      <div class="persoon"><span class="letters" style="background:${kleur(d.id)}">${esc(letters(d.id))}</span>
+        <span><b>${esc(d.naam)}</b><br><span class="klein muted">${status}</span></span></div>
+      <div class="rij">
+        <label class="veld"><span>E-mailadres</span><input name="email" type="email" value="${esc(d.email || "")}" ${d.user_id ? "readonly" : ""}></label>
+        <label class="veld" style="max-width:120px"><span>Inleg</span><input name="inleg" inputmode="decimal" value="${String(d.inleg).replace(".", ",")}"></label>
+      </div>
+      <div class="knoppen klein" style="gap:20px">
+        <label><input type="checkbox" name="actief" ${d.actief ? "checked" : ""} style="width:auto;min-height:0"> Actief</label>
+        <label><input type="checkbox" name="beheerder" ${d.is_beheerder ? "checked" : ""} ${d.id === S.ik.id ? "disabled" : ""} style="width:auto;min-height:0"> Beheerder</label>
+      </div>
+      <div class="knoppen">
+        <button class="knop">Opslaan</button>
+        ${!d.user_id ? `<button type="button" class="knop licht" data-nodig="${d.id}">Opslaan en uitnodigen</button>` : ""}
+      </div>
+    </form>`;
+  }).join("") + `
+    <form class="vlak" id="nieuw">
+      <h3>Deelnemer toevoegen</h3>
+      <div class="rij">
+        <label class="veld"><span>Naam</span><input name="naam" required></label>
+        <label class="veld" style="max-width:120px"><span>Inleg</span><input name="inleg" inputmode="decimal" value="50" required></label>
+      </div>
+      <label class="veld"><span>E-mailadres (mag later)</span><input name="email" type="email"></label>
+      <button class="knop">Toevoegen</button>
+    </form>`;
+
+  const opslaan = async (form, ookUitnodigen) => {
+    const id = form.dataset.d;
+    const d = deelnemer(id);
+    const f = new FormData(form);
+    const email = String(f.get("email") || "").trim().toLowerCase() || null;
+    const inleg = leesBedrag(f.get("inleg"));
+    if (!(inleg >= 0)) return toast("Vul een geldige inleg in.");
+    if (ookUitnodigen && !email) return toast("Vul eerst een e-mailadres in.");
+    const wijz = { inleg, actief: f.get("actief") === "on" };
+    if (!d.user_id) wijz.email = email;
+    if (id !== S.ik.id) wijz.is_beheerder = f.get("beheerder") === "on";
+    const { error } = await sb.from("deelnemers").update(wijz).eq("id", id);
+    if (error) return fout(error, "Opslaan");
+    toast("Opgeslagen");
+    await verversEnToon();
+    if (ookUitnodigen) uitnodigen({ ...d, email });
+  };
+  box.querySelectorAll("form[data-d]").forEach(f => {
+    f.onsubmit = e => { e.preventDefault(); opslaan(f, false); };
+    f.querySelector("[data-nodig]")?.addEventListener("click", () => opslaan(f, true));
+  });
+  $("#nieuw").onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const inleg = leesBedrag(f.get("inleg"));
+    const email = String(f.get("email") || "").trim().toLowerCase() || null;
+    const volgorde = Math.max(0, ...S.deelnemers.map(d => d.volgorde)) + 1;
+    const { error } = await sb.from("deelnemers").insert({ naam: String(f.get("naam")).trim(), inleg, email, volgorde });
+    if (error) return fout(error, "Toevoegen");
+    toast("Deelnemer toegevoegd");
+    verversEnToon();
+  };
+}
+
+function admBetalingen(box) {
+  const gemeld = S.betalingen.filter(b => !b.bevestigd);
+  const bevestigd = S.betalingen.filter(b => b.bevestigd).slice(0, 30);
+  const opties = S.deelnemers.filter(d => d.actief).map(d => `<option value="${d.id}">${esc(d.naam)}</option>`).join("");
+  box.innerHTML = `
+    <div class="vlak"><h3>Te bevestigen</h3>
+      ${gemeld.length ? `<ul class="lijst">${gemeld.map(b => `<li>
+        <span class="stip" style="background:${kleur(b.deelnemer_id)}"></span>
+        <span class="groei">${esc(deelnemer(b.deelnemer_id)?.naam)}<br><span class="klein muted">${datumKort(b.datum)}</span></span>
+        <span class="getal">${euro(b.bedrag)}</span>
+        <button class="knop klein" data-ok="${b.id}">Bevestigen</button>
+        <button class="knop klein licht" data-weg="${b.id}" aria-label="Verwijderen">×</button></li>`).join("")}</ul>`
+        : `<p class="muted">Geen meldingen om te bevestigen.</p>`}
+    </div>
+    <form class="vlak" id="betaling">
+      <h3>Overboeking invoeren</h3>
+      <div class="rij">
+        <label class="veld"><span>Van</span><select name="wie">${opties}</select></label>
+        <label class="veld"><span>Bedrag</span><input name="bedrag" inputmode="decimal" required></label>
+        <label class="veld"><span>Datum</span><input name="datum" type="date" value="${vandaag()}" required></label>
+      </div>
+      <button class="knop">Invoeren als bevestigd</button>
+    </form>
+    <div class="vlak"><h3>Bevestigd</h3>
+      <ul class="lijst">${bevestigd.map(b => `<li>
+        <span class="stip" style="background:${kleur(b.deelnemer_id)}"></span>
+        <span class="groei">${esc(deelnemer(b.deelnemer_id)?.naam)}<br><span class="klein muted">${datumKort(b.datum)}${b.opmerking ? `, ${esc(b.opmerking)}` : ""}</span></span>
+        <span class="getal">${euro(b.bedrag)}</span>
+        <button class="knop klein licht" data-weg="${b.id}" aria-label="Verwijderen">×</button></li>`).join("")}</ul>
+    </div>`;
+  box.querySelectorAll("[data-ok]").forEach(b => (b.onclick = async () => {
+    const { error } = await sb.from("betalingen").update({ bevestigd: true }).eq("id", b.dataset.ok);
+    if (error) return fout(error, "Bevestigen");
+    toast("Bevestigd");
+    verversEnToon();
+  }));
+  box.querySelectorAll("[data-weg]").forEach(b => (b.onclick = async () => {
+    if (!confirm("Deze overboeking verwijderen?")) return;
+    const { error } = await sb.from("betalingen").delete().eq("id", b.dataset.weg);
+    if (error) return fout(error, "Verwijderen");
+    verversEnToon();
+  }));
+  $("#betaling").onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const bedrag = leesBedrag(f.get("bedrag"));
+    if (!(bedrag > 0)) return toast("Vul een bedrag in.");
+    const { error } = await sb.from("betalingen").insert({ deelnemer_id: f.get("wie"), bedrag, datum: f.get("datum"), bevestigd: true });
+    if (error) return fout(error, "Invoeren");
+    toast("Overboeking ingevoerd");
+    verversEnToon();
+  };
+}
+
+// Regels als "Grolsch groot 5,90" per regel; "3x Grolsch groot 5,90" geeft drie regels
+function leesRegels(tekst) {
+  const uit = [];
+  for (const r of String(tekst || "").split(/\n/).map(x => x.trim()).filter(Boolean)) {
+    const m = r.match(/^(?:(\d+)\s*[x×]\s*)?(.*?)[\s€-]*(\d+[.,]\d{2})$/i);
+    if (!m) throw new Error(`Regel niet begrepen: "${r}"`);
+    const aantal = Number(m[1] || 1);
+    for (let i = 0; i < aantal; i++) uit.push({ omschrijving: m[2].trim() || "Artikel", bedrag: leesBedrag(m[3]) });
+  }
+  return uit;
+}
+
+function wedstrijdBijDatum(d) {
+  return S.wedstrijden.find(w => w.datum === d)
+    || S.wedstrijden.slice().sort((a, b) => Math.abs(dt(a.datum) - dt(d)) - Math.abs(dt(b.datum) - dt(d)))[0];
+}
+
+function admKaart(box) {
+  const nu = vandaag();
+  const gespeeld = S.wedstrijden.filter(w => w.datum <= nu).reverse();
+  const opw = S.transacties.filter(t => t.soort === "opwaardering").slice().reverse();
+  box.innerHTML = `
+    <div class="status let">Screenshots van de kaart uitlezen met AI komt in de volgende versie. Tot die tijd voer je aankopen hier in.</div>
+    <form class="vlak" id="aankoop">
+      <h3>Aankoop toevoegen</h3>
+      <label class="veld"><span>Wedstrijd</span><select name="wed">${gespeeld.map(w => `<option value="${w.id}">${datumKort(w.datum)}, ${esc(w.tegenstander)}</option>`).join("")}</select></label>
+      <div class="rij">
+        <label class="veld"><span>Kassa</span><input name="kassa" placeholder="C1-O-1-S1-PIN-11.1"></label>
+        <label class="veld" style="max-width:130px"><span>Tijd</span><input name="tijd" type="time"></label>
+        <label class="veld" style="max-width:130px"><span>Bedrag</span><input name="bedrag" inputmode="decimal" required></label>
+      </div>
+      <label class="veld"><span>Artikelen (mag leeg), één per regel, bijvoorbeeld: 3x Grolsch groot 5,90</span><textarea name="regels"></textarea></label>
+      <button class="knop">Aankoop toevoegen</button>
+    </form>
+    <form class="vlak" id="opwaardering">
+      <h3>Opwaardering toevoegen</h3>
+      <div class="rij">
+        <label class="veld"><span>Datum</span><input name="datum" type="date" value="${nu}" required></label>
+        <label class="veld"><span>Bedrag</span><input name="bedrag" inputmode="decimal" required></label>
+        <button class="knop">Toevoegen</button>
+      </div>
+    </form>
+    <div class="vlak"><h3>Opwaarderingen</h3>
+      <ul class="lijst">${opw.map(t => `<li><span class="groei">${datumKort(t.datum)}</span><span class="getal">${euro(t.bedrag)}</span>
+        <button class="knop klein licht" data-wegt="${t.id}" aria-label="Verwijderen">×</button></li>`).join("")}</ul>
+    </div>`;
+
+  $("#aankoop").onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const bedrag = leesBedrag(f.get("bedrag"));
+    if (!(bedrag > 0)) return toast("Vul het bedrag van de aankoop in.");
+    let regels;
+    try { regels = leesRegels(f.get("regels")); } catch (err) { return toast(err.message); }
+    if (regels.length && centen(regels.reduce((s, r) => s + r.bedrag, 0)) !== centen(bedrag)) {
+      return toast(`De artikelen tellen op tot ${euro(regels.reduce((s, r) => s + r.bedrag, 0))}, niet ${euro(bedrag)}.`);
+    }
+    const w = S.wedstrijden.find(x => x.id === f.get("wed"));
+    const { data: t, error } = await sb.from("transacties").insert({
+      soort: "aankoop", wedstrijd_id: w.id, datum: w.datum, tijd: f.get("tijd") || null,
+      kassa: String(f.get("kassa") || "").trim() || null, bedrag, bron: "handmatig",
+    }).select().single();
+    if (error) return fout(error, "Toevoegen");
+    if (regels.length) {
+      const { error: e2 } = await sb.from("transactie_regels").insert(regels.map((r, i) => ({ ...r, transactie_id: t.id, volgorde: i })));
+      if (e2) return fout(e2, "Artikelen opslaan");
+    }
+    toast("Aankoop toegevoegd");
+    await verversEnToon();
+    location.hash = `wedstrijd/${w.id}`;
+  };
+  $("#opwaardering").onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const bedrag = leesBedrag(f.get("bedrag"));
+    if (!(bedrag > 0)) return toast("Vul een bedrag in.");
+    const { error } = await sb.from("transacties").insert({ soort: "opwaardering", datum: f.get("datum"), bedrag, bron: "handmatig" });
+    if (error) return fout(error, "Toevoegen");
+    toast("Opwaardering toegevoegd");
+    verversEnToon();
+  };
+  box.querySelectorAll("[data-wegt]").forEach(b => (b.onclick = async () => {
+    if (!confirm("Deze opwaardering verwijderen?")) return;
+    const { error } = await sb.from("transacties").delete().eq("id", b.dataset.wegt);
+    if (error) return fout(error, "Verwijderen");
+    verversEnToon();
+  }));
+}
+
+function admProgramma(box) {
+  let verslag = null;
+  try { verslag = JSON.parse(S.instellingen.programma_laatst || "null"); } catch { /* leeg */ }
+  const komend = S.wedstrijden.filter(w => w.datum >= vandaag());
+  const regels = v => v && v.length ? v.map(x => "• " + x).join("\n") : "geen";
+  box.innerHTML = `
+    <div class="vlak">
+      <h3>Programma van fctwente.nl</h3>
+      <p class="klein muted">Wordt elke nacht vanzelf bijgewerkt. Alleen thuiswedstrijden, zonder oefenwedstrijden.</p>
+      ${verslag ? `<pre class="verslag">Laatst: ${new Date(verslag.tijdstip).toLocaleString("nl-NL")} (${esc(verslag.door)})
+Toegevoegd: ${esc(regels(verslag.toegevoegd))}
+Bijgewerkt: ${esc(regels(verslag.bijgewerkt))}${verslag.niet_meer_op_site?.length ? `\nNiet meer op de site: ${esc(regels(verslag.niet_meer_op_site))}` : ""}</pre>` : ""}
+      <button class="knop" id="ophalen">Nu bijwerken</button>
+    </div>
+    <form class="vlak" id="wedNieuw">
+      <h3>Wedstrijd zelf toevoegen</h3>
+      <div class="rij">
+        <label class="veld"><span>Tegenstander</span><input name="tegen" required></label>
+        <label class="veld"><span>Datum</span><input name="datum" type="date" required></label>
+        <label class="veld" style="max-width:120px"><span>Aanvang</span><input name="tijd" type="time"></label>
+      </div>
+      <button class="knop">Toevoegen</button>
+    </form>
+    <div class="vlak"><h3>Komende thuiswedstrijden</h3>
+      <ul class="lijst">${komend.map(w => `<li><span class="groei">${esc(w.tegenstander)}<br><span class="klein muted">${datumKort(w.datum)}${w.aanvang ? `, ${tijd(w.aanvang)}` : ""}${w.datum_voorlopig ? ", voorlopig" : ""}</span></span>
+        ${Number(w.aantal_transacties) === 0 ? `<button class="knop klein licht" data-wegw="${w.id}" aria-label="Verwijderen">×</button>` : ""}</li>`).join("")}</ul>
+    </div>`;
+
+  $("#ophalen").onclick = async e => {
+    const k = e.target;
+    k.disabled = true; k.textContent = "Bezig…";
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      const r = await fetch(`${SUPABASE_URL}/functions/v1/programma-ophalen`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.fout || r.statusText);
+      toast(`Bijgewerkt: ${j.toegevoegd.length} toegevoegd, ${j.bijgewerkt.length} gewijzigd`);
+      await verversEnToon();
+    } catch (err) {
+      k.disabled = false; k.textContent = "Nu bijwerken";
+      fout(err, "Bijwerken");
+    }
+  };
+  $("#wedNieuw").onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const { error } = await sb.from("wedstrijden").insert({
+      tegenstander: String(f.get("tegen")).trim(), datum: f.get("datum"), aanvang: f.get("tijd") || null,
+    });
+    if (error) return fout(error, "Toevoegen");
+    toast("Wedstrijd toegevoegd");
+    verversEnToon();
+  };
+  box.querySelectorAll("[data-wegw]").forEach(b => (b.onclick = async () => {
+    if (!confirm("Deze wedstrijd verwijderen?")) return;
+    const { error } = await sb.from("wedstrijden").delete().eq("id", b.dataset.wegw);
+    if (error) return fout(error, "Verwijderen");
+    verversEnToon();
+  }));
+}
+
+start();
+</script>
+</body>
+</html>
