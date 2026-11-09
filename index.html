@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vestekaart">
 <title>Vestekaart</title>
+<link rel="icon" type="image/png" href="logo.png">
+<link rel="apple-touch-icon" href="logo.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
@@ -227,7 +230,8 @@ pre.verslag { white-space: pre-wrap; font-size: .85rem; margin: 0; background: v
 @keyframes inschuiven { from { transform: translateX(-100%); } to { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .menu-paneel { animation: none; } }
 .menu-wie { display: flex; gap: 12px; align-items: center; padding: 4px 20px 16px; border-bottom: 1px solid var(--lijn); }
-.menu-wie .letters { width: 42px; height: 42px; font-size: 1.15rem; }
+.avatar { border-radius: 50%; object-fit: cover; flex: none; display: inline-block; background: var(--achter); }
+.fotoknoppen { display: flex; gap: 8px; flex-wrap: wrap; }
 .menu-paneel nav { display: grid; padding: 8px 0; }
 .menu-paneel nav a {
   padding: 12px 20px; text-decoration: none; color: var(--inkt); font-family: var(--kop);
@@ -322,7 +326,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.7";
+const VERSIE = "2026-11-09.9";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -380,6 +384,15 @@ const kleur = id => {
   return KLEUREN[(i < 0 ? 0 : i) % KLEUREN.length];
 };
 const letters = id => (deelnemer(id)?.naam || "?").slice(0, 2);
+// Profielfoto, of anders de eerste letters in de eigen kleur
+function avatar(id, px = 30) {
+  const d = deelnemer(id);
+  const u = d?.foto_pad ? urlVan("profielfotos", d.foto_pad) : null;
+  const st = `width:${px}px;height:${px}px;font-size:${Math.round(px * 0.42)}px;background:${kleur(id)}`;
+  return u
+    ? `<img class="avatar" src="${esc(u)}" alt="" style="width:${px}px;height:${px}px">`
+    : `<span class="letters" style="${st}" aria-hidden="true">${esc(letters(id))}</span>`;
+}
 const isBeheerder = () => !!S.ik?.is_beheerder;
 
 // ---------------------------------------------------------------------
@@ -403,6 +416,8 @@ async function laad() {
   [S.deelnemers, S.saldo, S.wedstrijden, S.pot, S.transacties, S.regels, S.claims, S.betalingen] = r.slice(0, 8).map(x => x.data);
   S.instellingen = Object.fromEntries(r[8].data.map(i => [i.sleutel, i.waarde]));
   S.screenshots = r[9].data;
+  const fotos = S.deelnemers.map(d => d.foto_pad).filter(Boolean);
+  if (fotos.length) await urlsVoor(fotos, "profielfotos", true);
   S.ik = S.deelnemers.find(d => d.user_id === S.user.id) || null;
   if (!S.alsId || !deelnemer(S.alsId)) S.alsId = S.ik?.id || null;
 }
@@ -512,14 +527,13 @@ function markeerTab(k) {
 
 // Menu linksboven
 function bouwMenu() {
-  const items = [["home", "Home"], ["wedstrijden", "Wedstrijden"], ["mijn", "Mijn verbruik"], ["pot", "De pot"]];
+  const items = [["pot", "De pot"]];
   if (isBeheerder()) items.push(["beheer", "Beheer"]);
   $("#menuPaneel").innerHTML = `
-    <div class="menu-wie"><span class="letters" style="background:${kleur(S.ik.id)}">${esc(letters(S.ik.id))}</span>
+    <div class="menu-wie">${avatar(S.ik.id, 42)}
       <span><b>${esc(S.ik.naam)}</b><br><span class="klein muted">${esc(S.user.email)}</span></span></div>
     <nav>
       ${items.map(([k, l]) => `<a href="#${k}" data-m="${k}" class="${S.tab === k ? "aan" : ""}">${l}</a>`).join("")}
-      <div class="scheiding"></div>
       <a href="#profiel" data-m="profiel" class="${S.tab === "profiel" ? "aan" : ""}">Profiel</a>
     </nav>
     <div class="menu-voet klein muted">Versie ${VERSIE}</div>`;
@@ -637,7 +651,7 @@ function toonPot() {
   const aandacht = S.wedstrijden.filter(w => Number(w.open) > 0);
   const rijen = S.deelnemers.filter(d => d.actief).map(d => {
     const s = S.saldo.find(x => x.id === d.id) || {};
-    return `<li><span class="stip" style="background:${kleur(d.id)}"></span>
+    return `<li>${avatar(d.id, 32)}
       <span class="groei">${esc(d.naam)}<br><span class="klein muted">verbruikt ${euro(s.verbruikt)}</span></span>
       <span class="rechts">${Number(s.openstaand) > 0
         ? `<span class="getal open">${euro(s.openstaand)}</span><br><span class="klein muted">over te maken</span>`
@@ -731,7 +745,7 @@ function toonWedstrijd(id) {
         <span class="naam">${esc(g.naam)}</span>
         <span class="klein muted">${euro(g.prijs)}, nog ${g.vrij.length} van ${g.regels.length} over</span>
         ${Object.keys(g.anderen).length ? `<span>${Object.entries(g.anderen).map(([did, n]) =>
-          `<span class="mini"><span class="stip" style="background:${kleur(did)}"></span>${esc(deelnemer(did)?.naam)} ${n}</span>`).join("")}</span>` : ""}
+          `<span class="mini">${avatar(did, 18)}${esc(deelnemer(did)?.naam)} ${n}</span>`).join("")}</span>` : ""}
       </div>
       <div class="stepper">
         <button type="button" data-min="${esc(g.k)}" ${g.mijn.length ? "" : "disabled"} aria-label="Eén ${esc(g.naam)} minder">−</button>
@@ -907,9 +921,15 @@ function toonProfiel() {
   titel("Profiel");
   scherm().innerHTML = `
     <div class="vlak">
-      <div class="persoon"><span class="letters" style="background:${kleur(S.ik.id)};width:48px;height:48px;font-size:1.3rem">${esc(letters(S.ik.id))}</span>
+      <div class="persoon">${avatar(S.ik.id, 72)}
         <span><h2>${esc(S.ik.naam)}</h2><span class="muted">${esc(S.user.email)}</span></span></div>
       <p class="klein muted">Inleg ${euro(S.ik.inleg)}${S.ik.is_beheerder ? ", beheerder" : ""}</p>
+      <div class="fotoknoppen">
+        <label class="knop licht" style="display:inline-flex;align-items:center">${S.ik.foto_pad ? "Andere foto kiezen" : "Profielfoto kiezen"}
+          <input type="file" id="foto" accept="image/*" hidden></label>
+        ${S.ik.foto_pad ? `<button type="button" class="knop licht" id="fotoWeg">Foto verwijderen</button>` : ""}
+      </div>
+      <p class="klein muted" id="fotoStatus" role="status"></p>
     </div>
     <form class="vlak" id="pw">
       <h3>Wachtwoord wijzigen</h3>
@@ -930,6 +950,48 @@ function toonProfiel() {
     toast("Wachtwoord gewijzigd");
   };
   $("#uit").onclick = () => sb.auth.signOut();
+  $("#foto").onchange = async e => {
+    const bestand = e.target.files[0];
+    if (!bestand) return;
+    const status = $("#fotoStatus");
+    status.textContent = "Foto verkleinen en opslaan…";
+    try {
+      const blob = await vierkant(bestand, 256);
+      const oud = S.ik.foto_pad;
+      const pad = `${S.ik.id}/${crypto.randomUUID()}.jpg`;
+      const { error: e1 } = await sb.storage.from("profielfotos").upload(pad, blob, { contentType: "image/jpeg" });
+      if (e1) throw e1;
+      const { error: e2 } = await sb.rpc("zet_mijn_foto", { p_pad: pad });
+      if (e2) throw e2;
+      if (oud) await sb.storage.from("profielfotos").remove([oud]);
+      toast(`Profielfoto opgeslagen (${Math.max(1, Math.round(blob.size / 1024))} kB)`);
+      verversEnToon();
+    } catch (err) {
+      status.textContent = "";
+      fout(err, "Foto opslaan");
+    }
+  };
+  $("#fotoWeg")?.addEventListener("click", async () => {
+    if (!confirm("Je profielfoto verwijderen?")) return;
+    const oud = S.ik.foto_pad;
+    const { error } = await sb.rpc("zet_mijn_foto", { p_pad: null });
+    if (error) return fout(error, "Verwijderen");
+    await sb.storage.from("profielfotos").remove([oud]);
+    toast("Profielfoto verwijderd");
+    verversEnToon();
+  });
+}
+
+// Maakt van een foto een vierkant van px bij px, uit het midden, als JPEG
+async function vierkant(bestand, px) {
+  const bron = await createImageBitmap(bestand);
+  const z = Math.min(bron.width, bron.height);
+  const c = document.createElement("canvas");
+  c.width = px; c.height = px;
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bron, (bron.width - z) / 2, (bron.height - z) / 2, z, z, 0, 0, px, px);
+  return await new Promise((ok, mis) => c.toBlob(b => (b ? ok(b) : mis(new Error("Verkleinen mislukt"))), "image/jpeg", 0.82));
 }
 
 // ---------------------------------------------------------------------
@@ -970,7 +1032,7 @@ function admDeelnemers(box) {
   box.innerHTML = S.deelnemers.map(d => {
     const status = d.user_id ? "Heeft een account" : d.email ? "Uitgenodigd, nog geen account" : "Nog geen e-mailadres";
     return `<form class="vlak" data-d="${d.id}">
-      <div class="persoon"><span class="letters" style="background:${kleur(d.id)}">${esc(letters(d.id))}</span>
+      <div class="persoon">${avatar(d.id, 36)}
         <span><b>${esc(d.naam)}</b><br><span class="klein muted">${status}</span></span></div>
       <div class="rij">
         <label class="veld"><span>E-mailadres</span><input name="email" type="email" value="${esc(d.email || "")}" ${d.user_id ? "readonly" : ""}></label>
@@ -1046,7 +1108,7 @@ function admBetalingen(box) {
     </form>
     <div class="vlak"><h3>Betalingen op de rekening</h3>
       ${lijst.length ? `<ul class="lijst">${lijst.map(b => `<li>
-        <span class="stip" style="background:${kleur(b.deelnemer_id)}"></span>
+        ${avatar(b.deelnemer_id, 28)}
         <span class="groei">${esc(deelnemer(b.deelnemer_id)?.naam)}<br><span class="klein muted">${datumKort(b.datum)}${b.opmerking ? `, ${esc(b.opmerking)}` : ""}</span></span>
         <span class="getal">${euro(b.bedrag)}</span>
         <button class="knop klein licht" data-weg="${b.id}" aria-label="Verwijderen">×</button></li>`).join("")}</ul>`
@@ -1197,27 +1259,30 @@ function galerijHtml(wedId) {
     <div class="galerij">${shots.map(x => `<button class="duim" data-kijk="${esc(x.id)}" aria-label="Screenshot groot bekijken">
       <img data-pad="${esc(x.pad)}" alt=""></button>`).join("")}</div></div>`;
 }
-async function urlsVoor(paden) {
+function urlVan(map, pad) {
+  const u = S.urls[`${map}:${pad}`];
+  return u && u.tot > Date.now() ? u.url : null;
+}
+async function urlsVoor(paden, map = "screenshots", stil = false) {
   const nu = Date.now();
-  const nodig = paden.filter(p => !S.urls[p] || S.urls[p].tot < nu);
-  if (nodig.length) {
-    const { data, error } = await sb.storage.from("screenshots").createSignedUrls(nodig, 3600);
-    if (error) { fout(error, "Screenshots laden"); return; }
-    (data || []).forEach(d => { if (d.signedUrl) S.urls[d.path] = { url: d.signedUrl, tot: nu + 50 * 60 * 1000 }; });
-  }
+  const nodig = paden.filter(p => !urlVan(map, p));
+  if (!nodig.length) return;
+  const { data, error } = await sb.storage.from(map).createSignedUrls(nodig, 3600);
+  if (error) { if (!stil) fout(error, "Afbeeldingen laden"); return; }
+  (data || []).forEach(d => { if (d.signedUrl) S.urls[`${map}:${d.path}`] = { url: d.signedUrl, tot: nu + 50 * 60 * 1000 }; });
 }
 async function vulPlaatjes(box) {
   const imgs = [...box.querySelectorAll("img[data-pad]")];
   if (!imgs.length) return;
   await urlsVoor([...new Set(imgs.map(i => i.dataset.pad))]);
-  imgs.forEach(i => { const u = S.urls[i.dataset.pad]; if (u) i.src = u.url; });
+  imgs.forEach(i => { const u = urlVan("screenshots", i.dataset.pad); if (u) i.src = u; });
   box.querySelectorAll("[data-kijk]").forEach(b => (b.onclick = () => openKijker(b.dataset.kijk)));
 }
 async function openKijker(id) {
   const x = S.screenshots.find(s => s.id === id);
   if (!x) return;
   await urlsVoor([x.pad]);
-  $("#kijkerImg").src = S.urls[x.pad]?.url || "";
+  $("#kijkerImg").src = urlVan("screenshots", x.pad) || "";
   $("#kijker").hidden = false;
   $("#kijkerDicht").focus();
   const weg = $("#kijkerWeg");

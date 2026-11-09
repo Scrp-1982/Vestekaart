@@ -1,0 +1,13 @@
+{
+  "name": "Vestekaart",
+  "short_name": "Vestekaart",
+  "lang": "nl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#EEF0F3",
+  "theme_color": "#C8102E",
+  "icons": [
+    { "src": "logo.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+  ]
+}
