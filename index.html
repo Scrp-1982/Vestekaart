@@ -355,7 +355,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.11";
+const VERSIE = "2026-11-09.12";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -398,6 +398,11 @@ function toast(tekst) {
 }
 function fout(e, wat) {
   console.error(e);
+  // Geweigerd door de database? Misschien is er inmiddels een code nodig.
+  if (/row-level security|permission denied/i.test(e?.message || "")) {
+    controleerCode().then(nodig => { if (!nodig) toast(`${wat} lukte niet: je hebt hier geen rechten voor.`); });
+    return;
+  }
   const m = e?.message || String(e);
   toast(`${wat} lukte niet: ${m}`);
 }
@@ -572,6 +577,15 @@ async function mfaBlok(el) {
     <p class="klein muted">Extra beveiliging: bij het inloggen vul je naast je wachtwoord een code in uit een authenticator-app, zoals de app Wachtwoorden op je iPhone. Op een apparaat waar je al bent ingelogd, blijf je gewoon ingelogd.</p>
     <a class="knop" href="#tweestap" style="justify-self:start;text-decoration:none">Aanzetten</a>`;
 }
+
+// Vraagt de code als dit apparaat die (inmiddels) nodig heeft
+async function controleerCode() {
+  if (!S.user) return false;
+  const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") { toonMfaCode(); return true; }
+  return false;
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && S.ik) controleerCode(); });
 
 async function verversEnToon() {
   try { await laad(); } catch (e) { return fout(e, "Gegevens laden"); }
