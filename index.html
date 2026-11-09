@@ -202,6 +202,62 @@ textarea { min-height: 90px; resize: vertical; }
 .leeg { text-align: center; padding: 24px 16px; }
 pre.verslag { white-space: pre-wrap; font-size: .85rem; margin: 0; background: var(--achter); padding: 10px; border-radius: 8px; overflow-x: auto; }
 
+/* Menu */
+.menuknop {
+  background: none; border: 0; color: inherit; padding: 6px; margin-left: -6px; cursor: pointer;
+  display: inline-flex; border-radius: 8px;
+}
+.menuknop svg { width: 26px; height: 26px; }
+.menu { position: fixed; inset: 0; z-index: 30; background: rgba(20, 22, 28, .45); }
+.menu[hidden] { display: none; }
+.menu-paneel {
+  position: absolute; top: 0; bottom: 0; left: 0; width: min(300px, 84vw);
+  background: var(--vlak); padding: calc(env(safe-area-inset-top, 0px) + 16px) 0 16px;
+  display: flex; flex-direction: column; box-shadow: 8px 0 30px rgba(0,0,0,.25);
+  animation: inschuiven .18s ease-out;
+}
+@keyframes inschuiven { from { transform: translateX(-100%); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .menu-paneel { animation: none; } }
+.menu-wie { display: flex; gap: 12px; align-items: center; padding: 4px 20px 16px; border-bottom: 1px solid var(--lijn); }
+.menu-wie .letters { width: 42px; height: 42px; font-size: 1.15rem; }
+.menu-paneel nav { display: grid; padding: 8px 0; }
+.menu-paneel nav a {
+  padding: 12px 20px; text-decoration: none; color: var(--inkt); font-family: var(--kop);
+  font-size: 1.3rem; font-weight: 600; border-left: 4px solid transparent;
+}
+.menu-paneel nav a.aan { border-left-color: var(--rood); color: var(--rood); }
+.menu-paneel .scheiding { height: 1px; background: var(--lijn); margin: 8px 0; }
+.menu-voet { margin-top: auto; padding: 0 20px; }
+
+/* Screenshots */
+.galerij { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.duim {
+  border: 0; padding: 0; background: var(--achter); border-radius: 8px; overflow: hidden; cursor: zoom-in;
+  aspect-ratio: 9 / 16; display: block; width: 100%;
+}
+.duim img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.kijker {
+  position: fixed; inset: 0; z-index: 40; background: #0E0F12; color: #fff;
+  display: flex; flex-direction: column;
+}
+.kijker[hidden] { display: none; }
+.kijker-balk {
+  display: flex; gap: 8px; justify-content: space-between; align-items: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px;
+}
+.kijker-balk button { background: rgba(255,255,255,.14); color: #fff; border: 0; border-radius: 10px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
+.kijker-beeld { flex: 1; overflow: auto; padding: 0 8px calc(env(safe-area-inset-bottom, 0px) + 8px); text-align: center; }
+.kijker-beeld img { max-width: 100%; height: auto; }
+.voorstel { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: start; padding: 12px 0; border-top: 1px solid var(--lijn); }
+.voorstel:first-of-type { border-top: 0; }
+.voorstel input[type=checkbox] { width: 22px; height: 22px; min-height: 0; margin-top: 2px; }
+.voorstel .extra { grid-column: 2 / 4; display: grid; gap: 6px; }
+.label { display: inline-block; border-radius: 6px; padding: 1px 8px; font-size: .8rem; font-weight: 600; }
+.label.nieuw { background: color-mix(in srgb, var(--groen) 18%, var(--vlak)); color: var(--groen); }
+.label.aanvullen { background: color-mix(in srgb, #2F6FDE 18%, var(--vlak)); color: #2F6FDE; }
+.label.bestaat, .label.let { background: color-mix(in srgb, var(--goud) 25%, var(--vlak)); }
+input[type=file] { padding: 8px; }
+
 /* Melding */
 #toast {
   position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
@@ -215,7 +271,18 @@ pre.verslag { white-space: pre-wrap; font-size: .85rem; margin: 0; background: v
 </style>
 </head>
 <body>
-<header class="balk"><button class="terug" id="terug" hidden aria-label="Terug">‹</button><h1 id="titel">Vestekaart</h1></header>
+<header class="balk">
+  <button class="menuknop" id="menuknop" hidden aria-label="Menu openen" aria-expanded="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+  <button class="terug" id="terug" hidden aria-label="Terug">‹</button>
+  <h1 id="titel">Vestekaart</h1>
+</header>
+<div class="menu" id="menu" hidden><div class="menu-paneel" role="dialog" aria-modal="true" aria-label="Menu" id="menuPaneel"></div></div>
+<div class="kijker" id="kijker" hidden role="dialog" aria-modal="true" aria-label="Screenshot">
+  <div class="kijker-balk"><button id="kijkerDicht">Sluiten</button><button id="kijkerWeg" hidden>Verwijderen</button></div>
+  <div class="kijker-beeld"><img id="kijkerImg" alt="Screenshot van de Vestekaart"></div>
+</div>
 <main id="scherm"><p class="muted">Laden…</p></main>
 <nav class="tabs" id="tabs" hidden></nav>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -224,7 +291,7 @@ pre.verslag { white-space: pre-wrap; font-size: .85rem; margin: 0; background: v
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.1";
+const VERSIE = "2026-11-09.2";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -237,7 +304,7 @@ const scherm = () => $("#scherm");
 const S = {
   user: null, ik: null, deelnemers: [], saldo: [], wedstrijden: [], pot: null,
   transacties: [], regels: [], claims: [], betalingen: [], instellingen: {},
-  alsId: null, wedFilter: "gespeeld",
+  alsId: null, wedFilter: "gespeeld", screenshots: [], urls: {}, voorstel: null,
 };
 
 // ---------------------------------------------------------------------
@@ -298,11 +365,13 @@ async function laad() {
     sb.from("claims").select("*").order("created_at"),
     sb.from("betalingen").select("*").order("datum", { ascending: false }).order("created_at", { ascending: false }),
     sb.from("instellingen").select("*"),
+    sb.from("screenshots").select("*").order("created_at"),
   ]);
   const mis = r.find(x => x.error);
   if (mis) throw mis.error;
   [S.deelnemers, S.saldo, S.wedstrijden, S.pot, S.transacties, S.regels, S.claims, S.betalingen] = r.slice(0, 8).map(x => x.data);
   S.instellingen = Object.fromEntries(r[8].data.map(i => [i.sleutel, i.waarde]));
+  S.screenshots = r[9].data;
   S.ik = S.deelnemers.find(d => d.user_id === S.user.id) || null;
   if (!S.alsId || !deelnemer(S.alsId)) S.alsId = S.ik?.id || null;
 }
@@ -316,7 +385,7 @@ async function verversEnToon() {
 // ---------------------------------------------------------------------
 async function start() {
   sb.auth.onAuthStateChange(ev => {
-    if (ev === "SIGNED_OUT") { S.user = null; S.ik = null; toonInloggen(); }
+    if (ev === "SIGNED_OUT") { S.user = null; S.ik = null; $("#menuknop").hidden = true; sluitMenu(); toonInloggen(); }
   });
   const { data: { session } } = await sb.auth.getSession();
   if (session) await naInloggen(session.user);
@@ -342,6 +411,7 @@ async function naInloggen(user) {
     return;
   }
   bouwTabs();
+  $("#menuknop").hidden = false;
   window.onhashchange = route;
   route();
 }
@@ -406,8 +476,42 @@ function bouwTabs() {
   $("#tabs").hidden = false;
 }
 function markeerTab(k) {
+  S.tab = k;
   document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("aan", a.dataset.tab === k));
 }
+
+// Menu linksboven
+function bouwMenu() {
+  const items = [["overzicht", "Overzicht"], ["wedstrijden", "Wedstrijden"], ["mijn", "Mijn verbruik"]];
+  if (isBeheerder()) items.push(["beheer", "Beheer"], ["inlezen", "Screenshots inlezen"]);
+  $("#menuPaneel").innerHTML = `
+    <div class="menu-wie"><span class="letters" style="background:${kleur(S.ik.id)}">${esc(letters(S.ik.id))}</span>
+      <span><b>${esc(S.ik.naam)}</b><br><span class="klein muted">${esc(S.user.email)}</span></span></div>
+    <nav>
+      ${items.map(([k, l]) => `<a href="#${k}" data-m="${k}" class="${S.tab === k ? "aan" : ""}">${l}</a>`).join("")}
+      <div class="scheiding"></div>
+      <a href="#profiel" data-m="profiel" class="${S.tab === "profiel" ? "aan" : ""}">Profiel</a>
+    </nav>
+    <div class="menu-voet klein muted">Versie ${VERSIE}</div>`;
+  $("#menuPaneel").querySelectorAll("a").forEach(a => (a.onclick = sluitMenu));
+}
+function openMenu() {
+  bouwMenu();
+  $("#menu").hidden = false;
+  $("#menuknop").setAttribute("aria-expanded", "true");
+  $("#menuPaneel").querySelector("a")?.focus();
+}
+function sluitMenu() {
+  $("#menu").hidden = true;
+  $("#menuknop").setAttribute("aria-expanded", "false");
+}
+$("#menuknop").onclick = openMenu;
+$("#menu").onclick = e => { if (e.target.id === "menu") sluitMenu(); };
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (!$("#kijker").hidden) sluitKijker();
+  else if (!$("#menu").hidden) sluitMenu();
+});
 function route() {
   if (!S.ik) return;
   const [pad, arg] = (location.hash.slice(1) || "overzicht").split("/");
@@ -415,6 +519,8 @@ function route() {
   if (pad === "wedstrijd" && arg) { markeerTab("wedstrijden"); return toonWedstrijd(arg); }
   if (pad === "wedstrijden") { markeerTab("wedstrijden"); return toonWedstrijden(); }
   if (pad === "mijn") { markeerTab("mijn"); return toonMijn(); }
+  if (pad === "profiel") { markeerTab("profiel"); return toonProfiel(); }
+  if (pad === "inlezen" && isBeheerder()) { markeerTab("beheer"); return toonInlezen(arg); }
   if (pad === "beheer" && isBeheerder()) { markeerTab("beheer"); return toonBeheer(arg || "deelnemers"); }
   markeerTab("overzicht");
   toonOverzicht();
@@ -547,8 +653,11 @@ function toonWedstrijd(id) {
       ${isBeheerder() && aankopen.length ? `<label class="veld"><span>Claimen als</span>
         <select id="als">${S.deelnemers.filter(d => d.actief).map(d => `<option value="${d.id}" ${d.id === als.id ? "selected" : ""}>${esc(d.naam)}</option>`).join("")}</select></label>` : ""}
     </div>
-    ${bonnen || `<div class="vlak leeg"><p class="muted">Nog geen aankopen bij deze wedstrijd.</p>
-      ${isBeheerder() ? `<a class="knop" href="#beheer/kaart" style="justify-self:center;text-decoration:none">Aankoop toevoegen</a>` : ""}</div>`}`;
+    ${galerijHtml(id)}
+    ${bonnen || `<div class="vlak leeg"><p class="muted">Nog geen aankopen bij deze wedstrijd.</p></div>`}
+    ${isBeheerder() ? `<div class="knoppen"><a class="knop" href="#inlezen/${id}" style="text-decoration:none">Screenshots inlezen</a>
+      <a class="knop licht" href="#beheer/kaart" style="text-decoration:none">Zelf invoeren</a></div>` : ""}`;
+  vulPlaatjes(scherm());
 
   const s = scherm();
   $("#als")?.addEventListener("change", e => { S.alsId = e.target.value; toonWedstrijd(id); });
@@ -630,13 +739,7 @@ function toonMijn() {
         ${!b.bevestigd ? `<button class="knop klein licht" data-intrek="${b.id}">Intrekken</button>` : ""}</li>`).join("")}</ul>`
         : `<p class="muted">Nog geen overboekingen.</p>`}
     </div>
-    <form class="vlak" id="pw">
-      <h3>Account</h3>
-      <p class="klein muted">Ingelogd als ${esc(S.user.email)}</p>
-      <label class="veld"><span>Nieuw wachtwoord (minstens 8 tekens)</span><input name="pw" type="password" minlength="8" autocomplete="new-password" required></label>
-      <div class="knoppen"><button class="knop">Wachtwoord wijzigen</button><button type="button" class="knop licht" id="uit">Uitloggen</button></div>
-      <p class="klein muted">Versie ${VERSIE}</p>
-    </form>`;
+    `;
 
   $("#meld")?.addEventListener("submit", async e => {
     e.preventDefault();
@@ -653,6 +756,30 @@ function toonMijn() {
     if (error) return fout(error, "Intrekken");
     verversEnToon();
   }));
+}
+
+// ---------------------------------------------------------------------
+// Profiel
+// ---------------------------------------------------------------------
+function toonProfiel() {
+  titel("Profiel");
+  scherm().innerHTML = `
+    <div class="vlak">
+      <div class="persoon"><span class="letters" style="background:${kleur(S.ik.id)};width:48px;height:48px;font-size:1.3rem">${esc(letters(S.ik.id))}</span>
+        <span><h2>${esc(S.ik.naam)}</h2><span class="muted">${esc(S.user.email)}</span></span></div>
+      <p class="klein muted">Inleg ${euro(S.ik.inleg)}${S.ik.is_beheerder ? ", beheerder" : ""}</p>
+    </div>
+    <form class="vlak" id="pw">
+      <h3>Wachtwoord wijzigen</h3>
+      <label class="veld"><span>Nieuw wachtwoord (minstens 8 tekens)</span><input name="pw" type="password" minlength="8" autocomplete="new-password" required></label>
+      <button class="knop" style="justify-self:start">Wachtwoord wijzigen</button>
+    </form>
+    <div class="vlak">
+      <h3>Op je beginscherm</h3>
+      <p class="klein muted">Open deze site in Safari, tik op Delen en kies Zet op beginscherm. Dan opent de Vestekaart als een gewone app.</p>
+    </div>
+    <div class="knoppen"><button type="button" class="knop licht" id="uit">Uitloggen</button></div>
+    <p class="klein muted">Versie ${VERSIE}</p>`;
   $("#pw").onsubmit = async e => {
     e.preventDefault();
     const { error } = await sb.auth.updateUser({ password: String(new FormData(e.target).get("pw")) });
@@ -837,7 +964,9 @@ function admKaart(box) {
   const gespeeld = S.wedstrijden.filter(w => w.datum <= nu).reverse();
   const opw = S.transacties.filter(t => t.soort === "opwaardering").slice().reverse();
   box.innerHTML = `
-    <div class="status let">Screenshots van de kaart uitlezen met AI komt in de volgende versie. Tot die tijd voer je aankopen hier in.</div>
+    <div class="vlak"><h3>Screenshots inlezen</h3>
+      <p class="klein muted">Upload screenshots van de Transactie Geschiedenis; de AI leest de aankopen en artikelen uit.</p>
+      <a class="knop" href="#inlezen" style="justify-self:start;text-decoration:none">Screenshots inlezen</a></div>
     <form class="vlak" id="aankoop">
       <h3>Aankoop toevoegen</h3>
       <label class="veld"><span>Wedstrijd</span><select name="wed">${gespeeld.map(w => `<option value="${w.id}">${datumKort(w.datum)}, ${esc(w.tegenstander)}</option>`).join("")}</select></label>
@@ -967,6 +1096,291 @@ Bijgewerkt: ${esc(regels(verslag.bijgewerkt))}${verslag.niet_meer_op_site?.lengt
     if (error) return fout(error, "Verwijderen");
     verversEnToon();
   }));
+}
+
+// ---------------------------------------------------------------------
+// Screenshots bekijken
+// ---------------------------------------------------------------------
+function galerijHtml(wedId) {
+  const shots = S.screenshots.filter(x => x.wedstrijd_id === wedId);
+  if (!shots.length) return "";
+  return `<div class="vlak"><h3>Screenshots van de kaart</h3>
+    <div class="galerij">${shots.map(x => `<button class="duim" data-kijk="${esc(x.id)}" aria-label="Screenshot groot bekijken">
+      <img data-pad="${esc(x.pad)}" alt=""></button>`).join("")}</div></div>`;
+}
+async function urlsVoor(paden) {
+  const nu = Date.now();
+  const nodig = paden.filter(p => !S.urls[p] || S.urls[p].tot < nu);
+  if (nodig.length) {
+    const { data, error } = await sb.storage.from("screenshots").createSignedUrls(nodig, 3600);
+    if (error) { fout(error, "Screenshots laden"); return; }
+    (data || []).forEach(d => { if (d.signedUrl) S.urls[d.path] = { url: d.signedUrl, tot: nu + 50 * 60 * 1000 }; });
+  }
+}
+async function vulPlaatjes(box) {
+  const imgs = [...box.querySelectorAll("img[data-pad]")];
+  if (!imgs.length) return;
+  await urlsVoor([...new Set(imgs.map(i => i.dataset.pad))]);
+  imgs.forEach(i => { const u = S.urls[i.dataset.pad]; if (u) i.src = u.url; });
+  box.querySelectorAll("[data-kijk]").forEach(b => (b.onclick = () => openKijker(b.dataset.kijk)));
+}
+async function openKijker(id) {
+  const x = S.screenshots.find(s => s.id === id);
+  if (!x) return;
+  await urlsVoor([x.pad]);
+  $("#kijkerImg").src = S.urls[x.pad]?.url || "";
+  $("#kijker").hidden = false;
+  $("#kijkerDicht").focus();
+  const weg = $("#kijkerWeg");
+  weg.hidden = !isBeheerder();
+  weg.onclick = async () => {
+    if (!confirm("Deze screenshot verwijderen? De aankopen die eruit zijn gelezen, blijven staan.")) return;
+    const { error: e1 } = await sb.storage.from("screenshots").remove([x.pad]);
+    if (e1) return fout(e1, "Verwijderen");
+    const { error: e2 } = await sb.from("screenshots").delete().eq("id", x.id);
+    if (e2) return fout(e2, "Verwijderen");
+    sluitKijker();
+    toast("Screenshot verwijderd");
+    verversEnToon();
+  };
+}
+function sluitKijker() { $("#kijker").hidden = true; $("#kijkerImg").src = ""; }
+$("#kijkerDicht").onclick = sluitKijker;
+
+// ---------------------------------------------------------------------
+// Screenshots inlezen met AI
+// ---------------------------------------------------------------------
+async function verklein(bestand) {
+  const bron = await createImageBitmap(bestand);
+  const max = 2000;
+  const f = Math.min(1, max / Math.max(bron.width, bron.height));
+  const w = Math.round(bron.width * f), h = Math.round(bron.height * f);
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  c.getContext("2d").drawImage(bron, 0, 0, w, h);
+  const blob = await new Promise(ok => c.toBlob(ok, "image/jpeg", 0.85));
+  return { blob, w, h };
+}
+
+async function roepFunctie(naam, body) {
+  const { data: { session } } = await sb.auth.getSession();
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/${naam}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.fout || j.message || `foutcode ${r.status}`);
+  return j;
+}
+
+function toonInlezen(wedId) {
+  titel("Screenshots inlezen", wedId ? `wedstrijd/${wedId}` : "beheer/kaart");
+  const nu = vandaag();
+  const gespeeld = S.wedstrijden.filter(w => w.datum <= nu).reverse();
+  const standaard = wedId || gespeeld[0]?.id;
+  scherm().innerHTML = `
+    <div class="vlak">
+      <p class="klein muted">Maak in de app van FC Twente screenshots van de Transactie Geschiedenis. Tik ook een aankoop aan en maak een screenshot van het venster met de artikelen. Je mag tot 10 screenshots tegelijk kiezen.</p>
+      <label class="veld"><span>Screenshots horen bij</span>
+        <select id="inWed">${gespeeld.map(w => `<option value="${w.id}" ${w.id === standaard ? "selected" : ""}>${datumKort(w.datum)}, ${esc(w.tegenstander)}</option>`).join("")}</select></label>
+      <label class="veld"><span>Screenshots</span><input type="file" id="inBest" accept="image/*" multiple></label>
+      <div class="galerij" id="inDuim"></div>
+      <button class="knop" id="inLees" disabled>Uploaden en uitlezen</button>
+      <p class="klein muted" id="inStatus" role="status"></p>
+    </div>
+    <div id="inUitkomst" class="stapel"></div>`;
+
+  let bestanden = [];
+  $("#inBest").onchange = e => {
+    bestanden = [...e.target.files].slice(0, 10);
+    if (e.target.files.length > 10) toast("Alleen de eerste 10 screenshots worden gebruikt.");
+    $("#inDuim").innerHTML = bestanden.map(f => `<div class="duim"><img src="${URL.createObjectURL(f)}" alt=""></div>`).join("");
+    $("#inLees").disabled = !bestanden.length;
+  };
+  $("#inLees").onclick = async () => {
+    const knop = $("#inLees"), status = $("#inStatus");
+    const wed = $("#inWed").value;
+    knop.disabled = true;
+    try {
+      const paden = [], rijen = [];
+      for (let i = 0; i < bestanden.length; i++) {
+        status.textContent = `Screenshot ${i + 1} van ${bestanden.length} uploaden…`;
+        const { blob, w, h } = await verklein(bestanden[i]);
+        const pad = `${wed}/${crypto.randomUUID()}.jpg`;
+        const { error } = await sb.storage.from("screenshots").upload(pad, blob, { contentType: "image/jpeg" });
+        if (error) throw error;
+        paden.push(pad);
+        rijen.push({ wedstrijd_id: wed, pad, breedte: w, hoogte: h });
+      }
+      const { data: shots, error: e2 } = await sb.from("screenshots").insert(rijen).select();
+      if (e2) throw e2;
+      const shotIds = paden.map(p => shots.find(x => x.pad === p)?.id || null);
+      await lees(paden, shotIds, wed);
+    } catch (err) {
+      status.textContent = "";
+      knop.disabled = false;
+      fout(err, "Uploaden");
+    }
+  };
+
+  async function lees(paden, shotIds, wed) {
+    const status = $("#inStatus");
+    status.textContent = "De AI leest de screenshots uit… dit duurt meestal 10 tot 30 seconden.";
+    try {
+      const res = await roepFunctie("kaart-lezen", { paden });
+      status.textContent = `Uitgelezen door ${res.model}.`;
+      await laad();
+      S.voorstel = maakVoorstel(res, shotIds, wed);
+      toonVoorstel();
+    } catch (err) {
+      status.textContent = "";
+      $("#inUitkomst").innerHTML = `<div class="status let">Uitlezen lukte niet: ${esc(err.message)}<br>
+        De screenshots zijn wel opgeslagen bij de wedstrijd.</div>
+        <button class="knop" id="opnieuw" style="justify-self:start">Opnieuw uitlezen</button>`;
+      $("#opnieuw").onclick = () => { $("#inUitkomst").innerHTML = ""; lees(paden, shotIds, wed); };
+    }
+  }
+}
+
+function maakVoorstel(res, shotIds, wed) {
+  const gebruikt = new Set();
+  const regels = res.transacties.map((t, i) => {
+    const bestaand = S.transacties.find(x => !gebruikt.has(x.id) && x.soort === t.soort && x.datum === t.datum &&
+      (x.kassa || "") === (t.kassa || "") && centen(x.bedrag) === centen(t.bedrag));
+    if (bestaand) gebruikt.add(bestaand.id);
+    const heeftRegels = bestaand && S.regels.some(r => r.transactie_id === bestaand.id);
+    const wedOpDatum = S.wedstrijden.find(w => w.datum === t.datum);
+    const wedId = t.soort === "aankoop" ? (wedOpDatum?.id || wed) : null;
+    const spreadsheet = wedId && S.transacties.some(x => x.wedstrijd_id === wedId && x.bron === "spreadsheet");
+    let status = "nieuw";
+    if (bestaand) status = (!bestaand.tijd && t.tijd) || (!heeftRegels && t.artikelen.length) ? "aanvullen" : "bestaat";
+    else if (spreadsheet) status = "spreadsheet";
+    const somArt = t.artikelen.reduce((s, a) => s + a.prijs * a.aantal, 0);
+    return {
+      i, t, bestaand, wedId, status, datumAfwijkend: t.soort === "aankoop" && !wedOpDatum,
+      aan: status === "nieuw" || status === "aanvullen",
+      artFout: t.artikelen.length > 0 && centen(somArt) !== centen(t.bedrag),
+      shotId: shotIds[t.bron] ?? shotIds[0],
+    };
+  });
+  return { res, regels, wed, shotIds };
+}
+
+function toonVoorstel() {
+  const V = S.voorstel;
+  const box = $("#inUitkomst");
+  if (!V.regels.length) {
+    box.innerHTML = `<div class="status let">De AI vond geen transacties op deze screenshots. Ze zijn wel opgeslagen bij de wedstrijd.</div>`;
+    return;
+  }
+  const tekst = {
+    nieuw: ["nieuw", "Nieuw"],
+    aanvullen: ["aanvullen", "Staat er al, wordt aangevuld"],
+    bestaat: ["bestaat", "Staat er al"],
+    spreadsheet: ["let", "Wedstrijd heeft al een totaal uit de spreadsheet"],
+  };
+  const wedOpties = sel => S.wedstrijden.filter(w => w.datum <= vandaag()).slice().reverse()
+    .map(w => `<option value="${w.id}" ${w.id === sel ? "selected" : ""}>${datumKort(w.datum)}, ${esc(w.tegenstander)}</option>`).join("");
+  box.innerHTML = `
+    <div class="vlak" id="voorstelVlak">
+      <h3>Gevonden op de screenshots</h3>
+      <p class="klein muted">Controleer de bedragen. Aangevinkte regels worden opgeslagen.</p>
+      <div>${V.regels.map(r => {
+        const t = r.t;
+        const art = t.artikelen.map(a => `${a.aantal > 1 ? `${a.aantal}× ` : ""}${esc(a.omschrijving)} à ${euro(a.prijs)}`).join(", ");
+        return `<div class="voorstel">
+          <input type="checkbox" data-v="${r.i}" ${r.aan ? "checked" : ""} ${r.status === "bestaat" ? "disabled" : ""} aria-label="Opslaan">
+          <span><b>${t.soort === "opwaardering" ? "Opwaardering" : esc(t.kassa || "Aankoop")}</b><br>
+            <span class="klein muted">${datumKort(t.datum)}${t.tijd ? `, ${t.tijd}` : ""}</span></span>
+          <b class="getal">${t.soort === "opwaardering" ? "+" : ""}${euro(t.bedrag)}</b>
+          <div class="extra">
+            <span><span class="label ${tekst[r.status][0]}">${tekst[r.status][1]}</span></span>
+            ${art ? `<span class="klein">${art}</span>` : ""}
+            ${r.artFout ? `<span class="klein open">De artikelen tellen niet op tot ${euro(t.bedrag)}. Controleer de screenshot.</span>` : ""}
+            ${t.soort === "aankoop" && !r.bestaand ? `<label class="veld"><span>${r.datumAfwijkend ? "Geen wedstrijd op deze datum. Kies de wedstrijd:" : "Wedstrijd"}</span>
+              <select data-w="${r.i}">${wedOpties(r.wedId)}</select></label>` : ""}
+          </div></div>`;
+      }).join("")}</div>
+      <div id="saldoCheck"></div>
+      <button class="knop" id="voorstelOpslaan">Opslaan</button>
+    </div>`;
+
+  const saldoCheck = () => {
+    const nieuw = V.regels.filter(r => r.aan && !r.bestaand);
+    const verwacht = Number(S.pot.saldo_kaart)
+      - nieuw.filter(r => r.t.soort === "aankoop").reduce((s, r) => s + r.t.bedrag, 0)
+      + nieuw.filter(r => r.t.soort === "opwaardering").reduce((s, r) => s + r.t.bedrag, 0);
+    const kaart = V.res.saldo;
+    $("#saldoCheck").innerHTML = kaart === null
+      ? `<p class="klein muted">Na opslaan berekent de app ${euro(verwacht)} op de kaart. Het tegoed was niet te zien op de screenshots.</p>`
+      : centen(kaart) === centen(verwacht)
+        ? `<div class="status goed">Na opslaan klopt de kaart precies: ${euro(verwacht)}, gelijk aan het Privé Tegoed.</div>`
+        : `<div class="status let">Na opslaan berekent de app ${euro(verwacht)}, maar het Privé Tegoed is ${euro(kaart)}. Verschil: ${euro(verwacht - kaart)}. Misschien ontbreekt er een aankoop of opwaardering, of staan er nog oudere aankopen niet in.</div>`;
+  };
+  saldoCheck();
+  box.querySelectorAll("[data-v]").forEach(c => (c.onchange = () => { V.regels[c.dataset.v].aan = c.checked; saldoCheck(); }));
+  box.querySelectorAll("[data-w]").forEach(s => (s.onchange = () => { V.regels[s.dataset.w].wedId = s.value; }));
+  $("#voorstelOpslaan").onclick = slaVoorstelOp;
+}
+
+async function slaVoorstelOp() {
+  const V = S.voorstel;
+  const knop = $("#voorstelOpslaan");
+  knop.disabled = true;
+  const wedPerShot = {};
+  const artikelRegels = (tid, t) => {
+    const uit = [];
+    t.artikelen.forEach(a => { for (let k = 0; k < a.aantal; k++) uit.push({ transactie_id: tid, omschrijving: a.omschrijving, bedrag: a.prijs, volgorde: uit.length }); });
+    return uit;
+  };
+  try {
+    let n = 0;
+    for (const r of V.regels.filter(x => x.aan)) {
+      const t = r.t;
+      let tid;
+      if (r.bestaand) {
+        tid = r.bestaand.id;
+        const upd = {};
+        if (!r.bestaand.tijd && t.tijd) upd.tijd = t.tijd;
+        if (!r.bestaand.screenshot_id && r.shotId) upd.screenshot_id = r.shotId;
+        if (Object.keys(upd).length) {
+          const { error } = await sb.from("transacties").update(upd).eq("id", tid);
+          if (error) throw error;
+        }
+        if (t.artikelen.length && !S.regels.some(x => x.transactie_id === tid)) {
+          const { error } = await sb.from("transactie_regels").insert(artikelRegels(tid, t));
+          if (error) throw error;
+        }
+        if (r.bestaand.wedstrijd_id) wedPerShot[t.bron] ??= r.bestaand.wedstrijd_id;
+      } else {
+        const { data, error } = await sb.from("transacties").insert({
+          soort: t.soort, wedstrijd_id: t.soort === "aankoop" ? r.wedId : null, datum: t.datum, tijd: t.tijd,
+          kassa: t.kassa, bedrag: t.bedrag, bron: "ai", screenshot_id: r.shotId,
+        }).select().single();
+        if (error) throw error;
+        tid = data.id;
+        if (t.artikelen.length) {
+          const { error: e2 } = await sb.from("transactie_regels").insert(artikelRegels(tid, t));
+          if (e2) throw e2;
+        }
+        if (t.soort === "aankoop") wedPerShot[t.bron] ??= r.wedId;
+      }
+      n++;
+    }
+    // Screenshots verhuizen naar de wedstrijd waar hun aankopen bij horen
+    for (const [bron, wid] of Object.entries(wedPerShot)) {
+      const sid = V.shotIds[bron];
+      if (sid && wid && wid !== V.wed) await sb.from("screenshots").update({ wedstrijd_id: wid }).eq("id", sid);
+    }
+    toast(`${n} ${n === 1 ? "regel" : "regels"} opgeslagen`);
+    S.voorstel = null;
+    await laad();
+    location.hash = `wedstrijd/${Object.values(wedPerShot)[0] || V.wed}`;
+  } catch (err) {
+    knop.disabled = false;
+    fout(err, "Opslaan");
+  }
 }
 
 start();
