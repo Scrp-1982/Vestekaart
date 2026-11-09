@@ -196,9 +196,9 @@ input[type=date]::-webkit-date-and-time-value, input[type=time]::-webkit-date-an
 .rij { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
 .rij > * { flex: 1; min-width: 120px; }
 .rij > .knop { flex: none; }
-.seg { display: flex; background: var(--vlak); border-radius: 10px; padding: 4px; gap: 4px; overflow-x: auto; }
+.seg { display: flex; background: var(--vlak); border-radius: 10px; padding: 4px; gap: 2px; overflow-x: auto; }
 .seg a, .seg button {
-  flex: 1; text-align: center; border: 0; background: none; padding: 8px 6px; border-radius: 8px; font-size: .95rem;
+  flex: 1; text-align: center; border: 0; background: none; padding: 8px 3px; border-radius: 8px; font-size: .82rem;
   text-decoration: none; color: var(--grijs); font-weight: 600; cursor: pointer; white-space: nowrap;
 }
 .seg .aan { background: var(--rood); color: #fff; }
@@ -355,7 +355,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.13";
+const VERSIE = "2026-11-09.17";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -894,10 +894,11 @@ function bedragBij(wedId, deelnemerId) {
 }
 function hadNiets(wedId) { return S.niets.has(wedId); }
 
+const seizoen = () => S.instellingen.seizoen ? `Seizoen ’${S.instellingen.seizoen}` : "";
 function kaartHtml() {
   const p = S.pot || {};
   return `<div class="kaart">
-      <div class="naam">Op de Vestekaart</div>
+      <div class="naam" style="display:flex;justify-content:space-between;gap:8px"><span>Op de Vestekaart</span><span style="opacity:.85">${seizoen()}</span></div>
       <div class="saldo">${euro(p.saldo_kaart)}</div>
       <div class="onder">
         <span>Op de rekening<b>${euro(p.saldo_rekening)}</b></span>
@@ -957,7 +958,7 @@ function toonPot() {
   scherm().innerHTML = `
     ${kaartHtml()}
     ${compleet
-      ? `<div class="status goed">De pot is compleet: kaart en rekening zijn samen precies de inleg van ${euro(inleg)}.</div>`
+      ? `<div class="status goed">De pot is compleet: kaart en rekening zijn samen precies de inleg van ${euro(inleg)} van de actieve deelnemers.</div>`
       : `<div class="status let">${centen(p.niet_geclaimd) > 0 ? `Er is nog ${euro(p.niet_geclaimd)} niet verdeeld. ` : ""}${centen(p.nog_over_te_maken) > 0 ? `Er moet nog ${euro(p.nog_over_te_maken)} worden overgemaakt. ` : ""}Daarna is de pot weer ${euro(inleg)}.</div>`}
     <div class="vlak"><h3>Per persoon</h3><ul class="lijst">${rijen}</ul></div>
     ${aandacht.length ? `<div class="stapel"><h3>Nog niet verdeeld</h3><div class="tickets">${aandacht.slice().reverse().map(ticket).join("")}</div></div>` : ""}`;
@@ -967,7 +968,7 @@ function toonPot() {
 // Wedstrijden
 // ---------------------------------------------------------------------
 function toonWedstrijden() {
-  titel("Wedstrijden");
+  titel(`Wedstrijden${S.instellingen.seizoen ? ` ’${S.instellingen.seizoen}` : ""}`);
   const nu = vandaag();
   const gespeeld = S.wedstrijden.filter(w => w.datum < nu).reverse();
   const komend = S.wedstrijden.filter(w => w.datum >= nu);
@@ -1302,13 +1303,15 @@ async function vierkant(bestand, px) {
 // ---------------------------------------------------------------------
 function toonBeheer(sub) {
   titel("Beheer");
-  const subs = [["deelnemers", "Deelnemers"], ["betalingen", "Betalingen"], ["kaart", "Kaart"], ["programma", "Programma"]];
+  const subs = [["deelnemers", "Deelnemers"], ["betalingen", "Betalingen"], ["kaart", "Kaart"], ["programma", "Programma"], ["seizoen", "Seizoen"]];
   scherm().innerHTML = `<nav class="seg">${subs.map(([k, l]) => `<a href="#beheer/${k}" class="${k === sub ? "aan" : ""}">${l}</a>`).join("")}</nav>
     <div id="adm" class="stapel"></div>`;
   const box = $("#adm");
+  scherm().querySelector(".seg .aan")?.scrollIntoView({ inline: "center", block: "nearest" });
   if (sub === "betalingen") return admBetalingen(box);
   if (sub === "kaart") return admKaart(box);
   if (sub === "programma") return admProgramma(box);
+  if (sub === "seizoen") return admSeizoen(box);
   return admDeelnemers(box);
 }
 
@@ -1367,6 +1370,7 @@ function admDeelnemers(box) {
           <button class="knop">Opslaan</button>
           ${!d.user_id ? `<button type="button" class="knop licht" data-nodig="${d.id}">Opslaan en uitnodigen</button>` : ""}
           ${mfa && !ik ? `<button type="button" class="tekstknop" data-mfauit="${d.id}">Tweestapsverificatie uitzetten</button>` : ""}
+          ${!ik ? `<button type="button" class="tekstknop" data-dweg="${d.id}">Verwijderen</button>` : ""}
         </div>
       </form>
     </details>`;
@@ -1392,6 +1396,9 @@ function admDeelnemers(box) {
     const wijz = { inleg };
     if (!d.user_id) wijz.email = email;
     if (id !== S.ik.id) { wijz.is_beheerder = f.get("beheerder") === "on"; wijz.actief = f.get("actief") === "on"; }
+    const sd = S.saldo.find(x => x.id === id);
+    if (d.actief && wijz.actief === false && sd && centen(sd.openstaand) !== 0)
+      return toast(`${d.naam} heeft nog ${euro(sd.openstaand)} open staan. Zet hem op inactief zodra dat is overgemaakt.`);
     S.openDeelnemer = id;
     const { error } = await sb.from("deelnemers").update(wijz).eq("id", id);
     if (error) return fout(error, "Opslaan");
@@ -1402,6 +1409,17 @@ function admDeelnemers(box) {
   box.querySelectorAll("details[data-open]").forEach(dt => dt.addEventListener("toggle", () => {
     if (dt.open) S.openDeelnemer = dt.dataset.open;
     else if (S.openDeelnemer === dt.dataset.open) S.openDeelnemer = null;
+  }));
+  box.querySelectorAll("[data-dweg]").forEach(b => (b.onclick = async () => {
+    const d = deelnemer(b.dataset.dweg);
+    const heeftGeschiedenis = S.claims.some(c => c.deelnemer_id === d.id) || S.betalingen.some(x => x.deelnemer_id === d.id);
+    if (heeftGeschiedenis) return toast(`${d.naam} heeft verbruik of betalingen in dit seizoen. Zet hem op inactief; na het afsluiten van het seizoen kun je hem verwijderen.`);
+    if (!confirm(`${d.naam} verwijderen? Zijn inleg van ${euro(d.inleg)} telt dan niet meer mee in de pot.`)) return;
+    const { error } = await sb.from("deelnemers").delete().eq("id", d.id);
+    if (error) return fout(error, "Verwijderen");
+    toast(`${d.naam} is verwijderd`);
+    S.openDeelnemer = null;
+    verversEnToon();
   }));
   box.querySelectorAll("[data-mfauit]").forEach(b => (b.onclick = async () => {
     const d = deelnemer(b.dataset.mfauit);
@@ -1517,6 +1535,96 @@ function admKaart(box) {
     const { error } = await sb.from("transacties").delete().eq("id", b.dataset.wegt);
     if (error) return fout(error, "Verwijderen");
     verversEnToon();
+  }));
+}
+
+async function admSeizoen(box) {
+  const p = S.pot || {};
+  const naam = S.instellingen.seizoen || "";
+  const openW = S.wedstrijden.filter(w => centen(w.open) > 0);
+  const openP = S.saldo.filter(x => centen(x.openstaand) !== 0);
+  const potOk = centen(p.saldo_totaal) === centen(p.inleg);
+  const klaar = !openW.length && !openP.length && potOk;
+  const punt = (ok, tekst, extra = "") => `<li><span style="font-size:1.1rem">${ok ? "✅" : "⏳"}</span><span class="groei">${tekst}${extra}</span></li>`;
+  box.innerHTML = `
+    <div class="vlak">
+      <h3>Seizoen \u2019${esc(naam)}</h3>
+      <ul class="lijst">
+        ${punt(!openW.length, "Alles is verdeeld", openW.length ? `<br><span class="klein muted">${openW.map(w => `${esc(w.tegenstander)}: nog ${euro(w.open)}`).join(", ")}</span>` : "")}
+        ${punt(!openP.length, "Iedereen heeft betaald", openP.length ? `<br><span class="klein muted">${openP.map(x => `${esc(x.naam)}: ${euro(x.openstaand)}`).join(", ")}</span>` : "")}
+        ${punt(potOk, `Kaart en rekening samen ${euro(p.saldo_totaal)}`, `<br><span class="klein muted">Inleg van de actieve deelnemers: ${euro(p.inleg)}</span>`)}
+      </ul>
+      <p class="klein muted">Bij het afsluiten wordt een archief gemaakt. Daarna worden alle gespeelde wedstrijden, aankopen, claims, betalingen en screenshots van dit seizoen verwijderd. Het saldo van de kaart (${euro(p.saldo_kaart)}) en de rekening (${euro(p.saldo_rekening)}) blijven staan. Deelnemers, accounts en meldingen blijven ook. Komende wedstrijden blijven staan; het nieuwe programma komt vanzelf van fctwente.nl.</p>
+      <button class="knop" id="afsluiten" ${klaar ? "" : "disabled"} style="justify-self:start">Seizoen \u2019${esc(naam)} afsluiten</button>
+    </div>
+    <div class="vlak" id="vorige"><h3>Vorige seizoenen</h3><p class="klein muted">Laden…</p></div>`;
+
+  $("#afsluiten").onclick = async () => {
+    const antwoord = prompt(`Weet je het zeker? Typ ${naam} om seizoen \u2019${naam} af te sluiten.`);
+    if (antwoord === null) return;
+    if (antwoord.trim().replace(/^['\u2019]/, "") !== naam) return toast("Niet afgesloten: de naam klopte niet.");
+    const k = $("#afsluiten");
+    k.disabled = true; k.textContent = "Bezig met afsluiten…";
+    try {
+      const paden = S.screenshots.map(x => x.pad);
+      for (let i = 0; i < paden.length; i += 100) {
+        const { error } = await sb.storage.from("screenshots").remove(paden.slice(i, i + 100));
+        if (error) throw error;
+      }
+      const { data, error } = await sb.rpc("seizoen_afsluiten");
+      if (error) throw error;
+      toast(`Seizoen \u2019${data.afgesloten} is afgesloten. Welkom in seizoen \u2019${data.nieuw}!`);
+      await verversEnToon();
+    } catch (err) {
+      k.disabled = false; k.textContent = `Seizoen \u2019${naam} afsluiten`;
+      fout(err, "Afsluiten");
+    }
+  };
+
+  const { data: seizoenen, error } = await sb.from("seizoenen").select("*").order("afgesloten_op", { ascending: false });
+  const vorige = $("#vorige");
+  if (!vorige) return;
+  if (error || !seizoenen?.length) {
+    vorige.innerHTML = `<h3>Vorige seizoenen</h3><p class="klein muted">${error ? "Nog niet beschikbaar." : "Nog geen afgesloten seizoenen."}</p>`;
+    return;
+  }
+  vorige.innerHTML = `<h3>Vorige seizoenen</h3><div class="accordeon">${seizoenen.map(z => {
+    const a = z.archief || {};
+    const deeln = (a.deelnemers || []).filter(x => Number(x.verbruikt) > 0).sort((x, y) => y.verbruikt - x.verbruikt);
+    const wed = a.wedstrijden || [];
+    const art = a.artikelen || [];
+    const duurste = wed.slice().sort((x, y) => y.kosten - x.kosten)[0];
+    const bier = art.filter(x => /grolsch|bier|pils/i.test(x.omschrijving) && !/0[.,]0/.test(x.omschrijving)).reduce((n, x) => n + Number(x.aantal), 0);
+    const meest = (a.deelnemers || []).slice().sort((x, y) => y.artikelen - x.artikelen)[0];
+    return `<details><summary><span class="groei"><b>Seizoen \u2019${esc(z.naam)}</b>
+        <span class="klein muted">${wed.length} wedstrijden, ${euro(a.aankopen)} besteed</span></span>
+        <svg class="pijl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <div class="binnen">
+        <div class="drie">
+          <span class="klein muted">Besteed<b class="getal" style="color:var(--inkt)">${euro(a.aankopen)}</b></span>
+          <span class="klein muted">Opgewaardeerd<b class="getal" style="color:var(--inkt)">${euro(a.opwaarderingen)}</b></span>
+          <span class="klein muted">Artikelen<b class="getal" style="color:var(--inkt)">${art.reduce((n, x) => n + Number(x.aantal), 0)}</b></span>
+        </div>
+        <ul class="lijst klein">
+          ${bier ? `<li><span class="groei">Biertjes</span><b>${bier}</b></li>` : ""}
+          ${duurste ? `<li><span class="groei">Duurste wedstrijd</span><b>${esc(duurste.tegenstander)}, ${euro(duurste.kosten)}</b></li>` : ""}
+          ${meest && meest.artikelen > 0 ? `<li><span class="groei">Meeste artikelen</span><b>${esc(meest.naam)}, ${meest.artikelen}</b></li>` : ""}
+        </ul>
+        <h3 style="font-size:1.1rem">Per persoon</h3>
+        <ul class="lijst">${deeln.map(x => `<li><span class="groei">${esc(x.naam)}</span><span class="getal">${euro(x.verbruikt)}</span></li>`).join("")}</ul>
+        <h3 style="font-size:1.1rem">Wedstrijden</h3>
+        <ul class="lijst">${wed.map(x => `<li><span class="groei">${esc(x.tegenstander)}<br><span class="klein muted">${datumKort(x.datum)}</span></span><span class="getal">${euro(x.kosten)}</span></li>`).join("")}</ul>
+        ${art.length ? `<h3 style="font-size:1.1rem">Artikelen</h3>
+        <ul class="lijst">${art.map(x => `<li><span class="groei">${esc(x.omschrijving)}</span><span class="klein muted">${x.aantal}×</span><span class="getal">${euro(x.totaal)}</span></li>`).join("")}</ul>` : ""}
+        <button type="button" class="tekstknop" data-zweg="${z.id}" data-naam="${esc(z.naam)}">Seizoen \u2019${esc(z.naam)} verwijderen</button>
+      </div></details>`;
+  }).join("")}</div>`;
+  vorige.querySelectorAll("[data-zweg]").forEach(b => (b.onclick = async () => {
+    if (!confirm(`Het archief van seizoen \u2019${b.dataset.naam} definitief verwijderen?`)) return;
+    const { error: e } = await sb.from("seizoenen").delete().eq("id", b.dataset.zweg);
+    if (e) return fout(e, "Verwijderen");
+    toast("Seizoen verwijderd");
+    admSeizoen(box);
   }));
 }
 
@@ -1732,7 +1840,48 @@ function toonInlezen(wedId) {
   }
 }
 
+// Bekende stukprijzen per artikel, de nieuwste eerst (datum van de laatste aankoop met die prijs)
+function bekendePrijzen() {
+  const datumVan = Object.fromEntries(S.transacties.map(t => [t.id, t.datum]));
+  const laatst = {};
+  S.regels.forEach(r => {
+    const k = r.omschrijving.trim().toLowerCase();
+    const c = centen(r.bedrag);
+    const d = datumVan[r.transactie_id] || "";
+    (laatst[k] ||= {});
+    if (!laatst[k][c] || laatst[k][c] < d) laatst[k][c] = d;
+  });
+  const uit = {};
+  for (const [k, prijzen] of Object.entries(laatst)) {
+    uit[k] = Object.entries(prijzen).sort((a, b) => b[1].localeCompare(a[1]) || a[0] - b[0]).map(([c]) => Number(c) / 100);
+  }
+  return uit;
+}
+
+// "Grolsch groot € 23,60" terwijl een Grolsch groot € 5,90 kost: dat zijn 4 stuks.
+// Eerst vergelijken met losse stuks op dezelfde screenshots (de actuele prijs),
+// daarna met de bekende prijzen van eerdere wedstrijden, de nieuwste eerst.
+function splitsMeervouden(lijst) {
+  const naam = x => x.trim().toLowerCase();
+  const bekend = bekendePrijzen();
+  const nu = {};
+  lijst.forEach(t => (t.artikelen || []).forEach(a => {
+    const k = naam(a.omschrijving);
+    if (!(k in nu) || a.prijs < nu[k]) nu[k] = a.prijs;
+  }));
+  lijst.forEach(t => (t.artikelen || []).forEach(a => {
+    if (a.aantal !== 1) return;
+    const k = naam(a.omschrijving);
+    for (const p of [nu[k], ...(bekend[k] || [])]) {
+      if (!(p > 0) || a.prijs <= p) continue;
+      const n = Math.round(a.prijs / p);
+      if (n >= 2 && n <= 30 && centen(a.prijs) === n * centen(p)) { a.aantal = n; a.prijs = p; a.gesplitst = true; return; }
+    }
+  }));
+}
+
 function maakVoorstel(res, shotIds, wed) {
+  splitsMeervouden(res.transacties);
   const gebruikt = new Set();
   const regels = res.transacties.filter(t => t.soort === "aankoop").map((t, i) => {
     const bestaand = S.transacties.find(x => !gebruikt.has(x.id) && x.soort === t.soort && x.datum === t.datum &&
@@ -1777,7 +1926,7 @@ function toonVoorstel() {
       <p class="klein muted">Controleer de bedragen. Aangevinkte regels worden opgeslagen.</p>
       <div>${V.regels.map(r => {
         const t = r.t;
-        const art = t.artikelen.map(a => `${a.aantal > 1 ? `${a.aantal}× ` : ""}${esc(a.omschrijving)} à ${euro(a.prijs)}`).join(", ");
+        const art = t.artikelen.map(a => `${a.aantal > 1 ? `${a.aantal}× ` : ""}${esc(a.omschrijving)} à ${euro(a.prijs)}${a.gesplitst ? " (stukprijs herkend)" : ""}`).join(", ");
         return `<div class="voorstel">
           <input type="checkbox" data-v="${r.i}" ${r.aan ? "checked" : ""} ${r.status === "bestaat" ? "disabled" : ""} aria-label="Opslaan">
           <span><b>${t.soort === "opwaardering" ? "Opwaardering" : esc(t.kassa || "Aankoop")}</b><br>
