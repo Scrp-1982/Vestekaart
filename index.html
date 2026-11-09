@@ -314,7 +314,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.4";
+const VERSIE = "2026-11-09.5";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -494,7 +494,6 @@ function toonInloggen(modus = "inloggen") {
 // ---------------------------------------------------------------------
 function bouwTabs() {
   const t = [["home", "Home"], ["wedstrijden", "Wedstrijden"], ["mijn", "Mijn"]];
-  if (isBeheerder()) t.push(["beheer", "Beheer"]);
   $("#tabs").innerHTML = t.map(([k, l]) => `<a href="#${k}" data-tab="${k}">${l}</a>`).join("");
   $("#tabs").hidden = false;
 }
