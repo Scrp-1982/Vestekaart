@@ -258,6 +258,29 @@ pre.verslag { white-space: pre-wrap; font-size: .85rem; margin: 0; background: v
 .label.bestaat, .label.let { background: color-mix(in srgb, var(--goud) 25%, var(--vlak)); }
 input[type=file] { padding: 8px; }
 
+/* Home en invullen */
+.mijnopen { display: grid; gap: 6px; text-decoration: none; color: inherit; border-left: 6px solid var(--rood); }
+.mijnopen .groot { font-family: var(--kop); font-size: 2.4rem; font-weight: 700; line-height: 1; color: var(--rood); }
+@media (prefers-color-scheme: dark) { .mijnopen .groot { color: #FF6B7D; } }
+.label.nieuw-w { background: var(--rood); color: #fff; }
+.item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--lijn); }
+.item:first-child { border-top: 0; }
+.item .groei { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.item .naam { font-weight: 600; font-size: 1.05rem; }
+.stepper { display: flex; align-items: center; gap: 4px; flex: none; }
+.stepper button {
+  width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--rood); background: var(--vlak);
+  color: var(--rood); font-size: 1.5rem; line-height: 1; cursor: pointer; font-weight: 600;
+}
+.stepper button.plus { background: var(--rood); color: #fff; }
+.stepper button[disabled] { opacity: .3; cursor: default; }
+.stepper .aantal { min-width: 32px; text-align: center; font-family: var(--kop); font-size: 1.5rem; font-weight: 700; }
+.mini { display: inline-flex; align-items: center; gap: 4px; font-size: .8rem; color: var(--grijs); margin-right: 8px; }
+.mini .stip { width: 8px; height: 8px; }
+.jouw { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
+.jouw .groot { font-family: var(--kop); font-size: 2.2rem; font-weight: 700; line-height: 1; }
+details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem; padding: 4px 0; }
+
 /* Melding */
 #toast {
   position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
@@ -291,7 +314,7 @@ input[type=file] { padding: 8px; }
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.2";
+const VERSIE = "2026-11-09.3";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -470,7 +493,7 @@ function toonInloggen(modus = "inloggen") {
 // Navigatie
 // ---------------------------------------------------------------------
 function bouwTabs() {
-  const t = [["overzicht", "Overzicht"], ["wedstrijden", "Wedstrijden"], ["mijn", "Mijn"]];
+  const t = [["home", "Home"], ["wedstrijden", "Wedstrijden"], ["mijn", "Mijn"]];
   if (isBeheerder()) t.push(["beheer", "Beheer"]);
   $("#tabs").innerHTML = t.map(([k, l]) => `<a href="#${k}" data-tab="${k}">${l}</a>`).join("");
   $("#tabs").hidden = false;
@@ -482,7 +505,7 @@ function markeerTab(k) {
 
 // Menu linksboven
 function bouwMenu() {
-  const items = [["overzicht", "Overzicht"], ["wedstrijden", "Wedstrijden"], ["mijn", "Mijn verbruik"]];
+  const items = [["home", "Home"], ["wedstrijden", "Wedstrijden"], ["mijn", "Mijn verbruik"], ["pot", "De pot"]];
   if (isBeheerder()) items.push(["beheer", "Beheer"], ["inlezen", "Screenshots inlezen"]);
   $("#menuPaneel").innerHTML = `
     <div class="menu-wie"><span class="letters" style="background:${kleur(S.ik.id)}">${esc(letters(S.ik.id))}</span>
@@ -514,16 +537,18 @@ document.addEventListener("keydown", e => {
 });
 function route() {
   if (!S.ik) return;
-  const [pad, arg] = (location.hash.slice(1) || "overzicht").split("/");
-  window.scrollTo(0, 0);
+  const [pad, arg] = (location.hash.slice(1) || "home").split("/");
+  if (S.vorigeHash !== location.hash) window.scrollTo(0, 0);
+  S.vorigeHash = location.hash;
   if (pad === "wedstrijd" && arg) { markeerTab("wedstrijden"); return toonWedstrijd(arg); }
   if (pad === "wedstrijden") { markeerTab("wedstrijden"); return toonWedstrijden(); }
   if (pad === "mijn") { markeerTab("mijn"); return toonMijn(); }
   if (pad === "profiel") { markeerTab("profiel"); return toonProfiel(); }
   if (pad === "inlezen" && isBeheerder()) { markeerTab("beheer"); return toonInlezen(arg); }
   if (pad === "beheer" && isBeheerder()) { markeerTab("beheer"); return toonBeheer(arg || "deelnemers"); }
-  markeerTab("overzicht");
-  toonOverzicht();
+  if (pad === "pot") { markeerTab("pot"); return toonPot(); }
+  markeerTab("home");
+  toonHome();
 }
 
 // ---------------------------------------------------------------------
@@ -542,12 +567,68 @@ function ticket(w) {
     <div class="bedrag">${rechts}</div></a>`;
 }
 
-function toonOverzicht() {
+// Wat iemand bij een wedstrijd heeft geclaimd
+function bedragBij(wedId, deelnemerId) {
+  const tids = new Set(S.transacties.filter(t => t.wedstrijd_id === wedId).map(t => t.id));
+  return S.claims.filter(c => c.deelnemer_id === deelnemerId && tids.has(c.transactie_id)).reduce((a, c) => a + Number(c.bedrag), 0);
+}
+const nietsSleutel = wedId => `vestekaart-niets-${S.user?.id}-${wedId}`;
+function hadNiets(wedId) { try { return localStorage.getItem(nietsSleutel(wedId)) === "1"; } catch { return false; } }
+
+function kaartHtml() {
+  const p = S.pot || {};
+  return `<div class="kaart">
+      <div class="naam">Op de Vestekaart</div>
+      <div class="saldo">${euro(p.saldo_kaart)}</div>
+      <div class="onder">
+        <span>Op de rekening<b>${euro(p.saldo_rekening)}</b></span>
+        <span class="rechts">Samen<b>${euro(p.saldo_totaal)}</b></span>
+      </div>
+    </div>`;
+}
+
+function toonHome() {
   titel("Vestekaart");
+  const s = S.saldo.find(x => x.id === S.ik.id) || {};
+  const gemeld = Number(s.gemeld || 0);
+  const open = Number(s.openstaand) - gemeld;
+  const nu = vandaag();
+  const teDoen = S.wedstrijden
+    .filter(w => w.datum <= nu && Number(w.open) > 0)
+    .map(w => ({ w, mijn: bedragBij(w.id, S.ik.id) }))
+    .filter(x => !(x.mijn === 0 && hadNiets(x.w.id)))
+    .reverse();
+
+  const kaartje = ({ w, mijn }) => {
+    const d = dt(w.datum);
+    return `<a class="ticket" href="#wedstrijd/${w.id}">
+      <div class="dag"><b>${d.getDate()}</b><span>${d.toLocaleDateString("nl-NL", { month: "short" })}</span></div>
+      <div class="wie"><b>${esc(w.tegenstander)}</b><span class="klein muted">${mijn > 0 ? `Nog ${euro(w.open)} niet verdeeld` : `Kosten ${euro(w.kosten)}`}</span></div>
+      <div class="bedrag">${mijn > 0
+        ? `<span class="klein muted">Jij</span><br><span class="getal">${euro(mijn)}</span>`
+        : `<span class="label nieuw-w">Nieuw</span><br><span class="klein muted">vul in</span>`}</div></a>`;
+  };
+
+  scherm().innerHTML = `
+    ${kaartHtml()}
+    ${centen(open) > 0
+      ? `<a class="vlak mijnopen" href="#mijn">
+          <span class="klein muted">Jij hebt nog open staan</span>
+          <span class="groot">${euro(open)}</span>
+          <span class="klein">Maak het over naar de rekening en meld het onder Mijn.</span></a>`
+      : centen(gemeld) > 0
+        ? `<div class="status let">Je overboeking van ${euro(gemeld)} wacht op bevestiging.</div>`
+        : `<div class="status goed">Je hebt niets open staan.</div>`}
+    ${teDoen.length
+      ? `<div class="stapel"><h3>Geef aan wat je had</h3><div class="tickets">${teDoen.map(kaartje).join("")}</div></div>`
+      : ""}`;
+}
+
+function toonPot() {
+  titel("De pot");
   const p = S.pot || {};
   const inleg = Number(p.inleg);
   const compleet = centen(p.saldo_totaal) === centen(inleg) && centen(p.niet_geclaimd) === 0;
-  const volgende = S.wedstrijden.find(w => w.datum >= vandaag());
   const aandacht = S.wedstrijden.filter(w => Number(w.open) > 0);
   const rijen = S.deelnemers.filter(d => d.actief).map(d => {
     const s = S.saldo.find(x => x.id === d.id) || {};
@@ -557,22 +638,13 @@ function toonOverzicht() {
         ? `<span class="getal open">${euro(s.openstaand)}</span><br><span class="klein muted">over te maken</span>`
         : `<span class="klein muted">alles betaald</span>`}</span></li>`;
   }).join("");
-
   scherm().innerHTML = `
-    <div class="kaart">
-      <div class="naam">Op de Vestekaart</div>
-      <div class="saldo">${euro(p.saldo_kaart)}</div>
-      <div class="onder">
-        <span>Op de rekening<b>${euro(p.saldo_rekening)}</b></span>
-        <span class="rechts">Samen<b>${euro(p.saldo_totaal)}</b></span>
-      </div>
-    </div>
+    ${kaartHtml()}
     ${compleet
       ? `<div class="status goed">De pot is compleet: kaart en rekening zijn samen precies de inleg van ${euro(inleg)}.</div>`
-      : `<div class="status let">${centen(p.niet_geclaimd) > 0 ? `Er is nog ${euro(p.niet_geclaimd)} niet toegewezen. ` : ""}${centen(p.nog_over_te_maken) > 0 ? `Er moet nog ${euro(p.nog_over_te_maken)} worden overgemaakt. ` : ""}Daarna is de pot weer ${euro(inleg)}.</div>`}
-    ${aandacht.length ? `<div class="stapel"><h3>Nog niet verdeeld</h3><div class="tickets">${aandacht.slice().reverse().map(ticket).join("")}</div></div>` : ""}
+      : `<div class="status let">${centen(p.niet_geclaimd) > 0 ? `Er is nog ${euro(p.niet_geclaimd)} niet verdeeld. ` : ""}${centen(p.nog_over_te_maken) > 0 ? `Er moet nog ${euro(p.nog_over_te_maken)} worden overgemaakt. ` : ""}Daarna is de pot weer ${euro(inleg)}.</div>`}
     <div class="vlak"><h3>Per persoon</h3><ul class="lijst">${rijen}</ul></div>
-    ${volgende ? `<div class="stapel"><h3>Volgende thuiswedstrijd</h3>${ticket(volgende)}</div>` : ""}`;
+    ${aandacht.length ? `<div class="stapel"><h3>Nog niet verdeeld</h3><div class="tickets">${aandacht.slice().reverse().map(ticket).join("")}</div></div>` : ""}`;
 }
 
 // ---------------------------------------------------------------------
@@ -610,88 +682,146 @@ function chip(c, magWeg) {
 function toonWedstrijd(id) {
   const w = S.wedstrijden.find(x => x.id === id);
   if (!w) { location.hash = "wedstrijden"; return; }
-  titel(w.tegenstander, "wedstrijden");
-  const aankopen = S.transacties.filter(t => t.wedstrijd_id === id && t.soort === "aankoop");
-  const magWeg = c => isBeheerder() || c.deelnemer_id === S.ik.id;
+  titel(w.tegenstander, "home");
   const als = deelnemer(S.alsId) || S.ik;
+  const ikZelf = als.id === S.ik.id;
+  const aankopen = S.transacties.filter(t => t.wedstrijd_id === id && t.soort === "aankoop");
+  const tids = new Set(aankopen.map(t => t.id));
+  const regels = S.regels.filter(r => tids.has(r.transactie_id));
+  const claims = S.claims.filter(c => tids.has(c.transactie_id));
+  const opRegel = new Map(claims.filter(c => c.regel_id).map(c => [c.regel_id, c]));
+  const mijnTotaal = claims.filter(c => c.deelnemer_id === als.id).reduce((a, c) => a + Number(c.bedrag), 0);
+  const magWeg = c => isBeheerder() || c.deelnemer_id === S.ik.id;
 
-  const bonnen = aankopen.map(t => {
-    const regels = S.regels.filter(r => r.transactie_id === t.id);
-    const claims = S.claims.filter(c => c.transactie_id === t.id);
-    const vrij = Number(t.bedrag) - claims.reduce((s, c) => s + Number(c.bedrag), 0);
-    const regelHtml = regels.map(r => {
-      const c = claims.find(x => x.regel_id === r.id);
-      return `<div class="regel"><span class="groei">${esc(r.omschrijving)}</span><span class="getal">${euro(r.bedrag)}</span>
-        ${c ? chip(c, magWeg(c)) : `<button class="knop klein licht" data-regel="${r.id}" data-t="${t.id}">${als.id === S.ik.id ? "Van mij" : `Voor ${esc(als.naam)}`}</button>`}</div>`;
-    }).join("");
-    const losse = claims.filter(c => !c.regel_id);
-    const kop = [t.kassa ? esc(t.kassa) : (t.bron === "spreadsheet" ? "Totaal uit de spreadsheet" : "Aankoop"), tijd(t.tijd)].filter(Boolean).join(", ");
+  // Artikelen van alle aankopen samen, per soort
+  const groepen = [];
+  for (const r of regels) {
+    const k = `${r.omschrijving.trim().toLowerCase()}|${centen(r.bedrag)}`;
+    let g = groepen.find(x => x.k === k);
+    if (!g) groepen.push(g = { k, naam: r.omschrijving.trim(), prijs: Number(r.bedrag), regels: [] });
+    g.regels.push(r);
+  }
+  groepen.forEach(g => {
+    g.vrij = g.regels.filter(r => !opRegel.has(r.id));
+    g.mijn = g.regels.filter(r => opRegel.get(r.id)?.deelnemer_id === als.id);
+    const anderen = {};
+    g.regels.forEach(r => { const c = opRegel.get(r.id); if (c && c.deelnemer_id !== als.id) anderen[c.deelnemer_id] = (anderen[c.deelnemer_id] || 0) + 1; });
+    g.anderen = anderen;
+  });
+  groepen.sort((a, b) => b.regels.length - a.regels.length || a.naam.localeCompare(b.naam));
+
+  // Aankopen (of resten) die je alleen met een bedrag kunt claimen
+  const losseBonnen = aankopen.map(t => {
+    const tr = regels.filter(r => r.transactie_id === t.id);
+    const tc = claims.filter(c => c.transactie_id === t.id);
+    const vrij = Number(t.bedrag) - tc.reduce((a, c) => a + Number(c.bedrag), 0);
+    const regelVrij = tr.filter(r => !opRegel.has(r.id)).reduce((a, r) => a + Number(r.bedrag), 0);
+    const zonderArt = vrij - regelVrij;
+    return { t, tc, vrij, zonderArt, heeftRegels: tr.length > 0 };
+  }).filter(x => !x.heeftRegels || centen(x.zonderArt) > 0 || x.tc.some(c => !c.regel_id));
+
+  const itemsHtml = groepen.map(g => `
+    <div class="item">
+      <div class="groei">
+        <span class="naam">${esc(g.naam)}</span>
+        <span class="klein muted">${euro(g.prijs)}, nog ${g.vrij.length} van ${g.regels.length} over</span>
+        ${Object.keys(g.anderen).length ? `<span>${Object.entries(g.anderen).map(([did, n]) =>
+          `<span class="mini"><span class="stip" style="background:${kleur(did)}"></span>${esc(deelnemer(did)?.naam)} ${n}</span>`).join("")}</span>` : ""}
+      </div>
+      <div class="stepper">
+        <button type="button" data-min="${esc(g.k)}" ${g.mijn.length ? "" : "disabled"} aria-label="Eén ${esc(g.naam)} minder">−</button>
+        <span class="aantal" aria-label="Aantal">${g.mijn.length}</span>
+        <button type="button" class="plus" data-plus="${esc(g.k)}" ${g.vrij.length ? "" : "disabled"} aria-label="Eén ${esc(g.naam)} meer">+</button>
+      </div>
+    </div>`).join("");
+
+  const losHtml = losseBonnen.map(({ t, tc, vrij, zonderArt, heeftRegels }) => {
+    const losseClaims = tc.filter(c => !c.regel_id);
+    const naam = t.bron === "spreadsheet" ? "Totaal uit de spreadsheet" : (t.kassa || "Aankoop");
+    const max = heeftRegels ? zonderArt : vrij;
     return `<article class="bon">
-      <div class="bon-kop"><span class="klein muted">${kop}</span><b class="getal">${euro(t.bedrag)}</b></div>
-      ${verdelingBalk(t, claims)}
-      ${regelHtml}
-      ${losse.length ? `<div class="chips">${losse.map(c => chip(c, magWeg(c))).join("")}</div>` : ""}
-      ${centen(vrij) > 0 ? `<form class="claimrij" data-claim="${t.id}">
-          <label class="veld"><span>Nog vrij: ${euro(vrij)}${als.id === S.ik.id ? "" : `, claimen voor ${esc(als.naam)}`}</span>
-            <input name="bedrag" inputmode="decimal" placeholder="Bedrag" required></label>
+      <div class="bon-kop"><span class="klein muted">${esc(naam)}${t.tijd ? `, ${tijd(t.tijd)}` : ""}</span><b class="getal">${euro(t.bedrag)}</b></div>
+      ${verdelingBalk(t, tc)}
+      ${losseClaims.length ? `<div class="chips">${losseClaims.map(c => chip(c, magWeg(c))).join("")}</div>` : ""}
+      ${centen(max) > 0 ? `<form class="claimrij" data-claim="${t.id}" data-max="${max.toFixed(2)}">
+          <label class="veld"><span>Nog vrij: ${euro(max)}</span><input name="bedrag" inputmode="decimal" placeholder="Jouw bedrag" required></label>
           <button class="knop">Claimen</button>
-          <button type="button" class="knop licht" data-rest="${t.id}" data-vrij="${vrij.toFixed(2)}">Alles</button>
+          <button type="button" class="knop licht" data-rest="${t.id}" data-vrij="${max.toFixed(2)}">Alles</button>
         </form>` : `<span class="klein muted">Helemaal verdeeld.</span>`}
-      ${isBeheerder() ? `<button type="button" class="tekstknop" data-wegt="${t.id}">Aankoop verwijderen</button>` : ""}
     </article>`;
   }).join("");
 
   scherm().innerHTML = `
     <div class="vlak">
       <div><h2>FC Twente – ${esc(w.tegenstander)}</h2>
-        <span class="muted">${datumLang(w.datum)}${w.aanvang ? `, ${tijd(w.aanvang)}` : ""}${w.datum_voorlopig ? " (voorlopig)" : ""}${w.competitie ? `, ${esc(w.competitie)}` : ""}</span></div>
-      <div class="drie">
-        <span class="klein muted">Kosten<b class="getal" style="color:var(--inkt)">${euro(w.kosten)}</b></span>
-        <span class="klein muted">Verdeeld<b class="getal" style="color:var(--inkt)">${euro(w.geclaimd)}</b></span>
-        <span class="klein muted">Open<b class="getal ${Number(w.open) > 0 ? "open" : ""}" style="${Number(w.open) > 0 ? "" : "color:var(--inkt)"}">${euro(w.open)}</b></span>
-      </div>
-      ${isBeheerder() && aankopen.length ? `<label class="veld"><span>Claimen als</span>
+        <span class="muted">${datumLang(w.datum)}${w.aanvang ? `, ${tijd(w.aanvang)}` : ""}${w.datum_voorlopig ? " (voorlopig)" : ""}</span></div>
+      ${isBeheerder() && aankopen.length ? `<label class="veld"><span>Invullen voor</span>
         <select id="als">${S.deelnemers.filter(d => d.actief).map(d => `<option value="${d.id}" ${d.id === als.id ? "selected" : ""}>${esc(d.naam)}</option>`).join("")}</select></label>` : ""}
+      ${aankopen.length ? `<div class="jouw">
+        <span><span class="klein muted">${ikZelf ? "Jouw bedrag" : `Bedrag van ${esc(als.naam)}`}</span><br><span class="groot">${euro(mijnTotaal)}</span></span>
+        <span class="rechts klein muted">Kosten ${euro(w.kosten)}<br>${Number(w.open) > 0 ? `<span class="open">nog ${euro(w.open)} niet verdeeld</span>` : "alles verdeeld"}</span>
+      </div>` : ""}
     </div>
+    ${groepen.length ? `<div class="vlak"><h3>${ikZelf ? "Wat had je?" : `Wat had ${esc(als.naam)}?`}</h3><div>${itemsHtml}</div></div>` : ""}
+    ${losHtml ? `<div class="stapel">${groepen.length ? `<h3>Aankopen zonder artikellijst</h3>` : ""}${losHtml}</div>` : ""}
+    ${!aankopen.length ? `<div class="vlak leeg"><p class="muted">${w.datum > vandaag() ? "Deze wedstrijd moet nog gespeeld worden." : "Er zijn nog geen aankopen bij deze wedstrijd ingelezen."}</p></div>` : ""}
+    ${ikZelf && aankopen.length && mijnTotaal === 0 && Number(w.open) > 0 && !hadNiets(id)
+      ? `<button type="button" class="tekstknop" id="niets" style="justify-self:center">Ik had niets bij deze wedstrijd</button>` : ""}
     ${galerijHtml(id)}
-    ${bonnen || `<div class="vlak leeg"><p class="muted">Nog geen aankopen bij deze wedstrijd.</p></div>`}
-    ${isBeheerder() ? `<div class="knoppen"><a class="knop" href="#inlezen/${id}" style="text-decoration:none">Screenshots inlezen</a>
-      <a class="knop licht" href="#beheer/kaart" style="text-decoration:none">Zelf invoeren</a></div>` : ""}`;
+    ${isBeheerder() ? `
+      ${aankopen.length ? `<details class="alle"><summary>Alle aankopen bij deze wedstrijd (${aankopen.length})</summary>
+        <ul class="lijst">${aankopen.map(t => `<li><span class="groei">${esc(t.kassa || (t.bron === "spreadsheet" ? "Spreadsheet" : "Aankoop"))}<br>
+          <span class="klein muted">${t.tijd ? tijd(t.tijd) + ", " : ""}${S.regels.filter(r => r.transactie_id === t.id).length} artikelen</span></span>
+          <span class="getal">${euro(t.bedrag)}</span>
+          <button class="knop klein licht" data-wegt="${t.id}" aria-label="Aankoop verwijderen">×</button></li>`).join("")}</ul></details>` : ""}
+      <div class="knoppen"><a class="knop" href="#inlezen/${id}" style="text-decoration:none">Screenshots inlezen</a>
+        <a class="knop licht" href="#beheer/kaart" style="text-decoration:none">Zelf invoeren</a></div>` : ""}`;
   vulPlaatjes(scherm());
 
-  const s = scherm();
-  $("#als")?.addEventListener("change", e => { S.alsId = e.target.value; toonWedstrijd(id); });
-  s.querySelectorAll("[data-regel]").forEach(b => (b.onclick = async () => {
-    const r = S.regels.find(x => x.id === b.dataset.regel);
-    b.disabled = true;
-    const { error } = await sb.from("claims").insert({ transactie_id: b.dataset.t, deelnemer_id: als.id, regel_id: r.id, bedrag: r.bedrag });
-    if (error) { b.disabled = false; return fout(error, "Claimen"); }
+  const sc = scherm();
+  let bezig = false;
+  const doe = async (fn, wat) => {
+    if (bezig) return;
+    bezig = true;
+    sc.querySelectorAll(".stepper button").forEach(b => (b.disabled = true));
+    const { error } = await fn();
+    bezig = false;
+    if (error) { fout(error, wat); }
     verversEnToon();
+  };
+  $("#als")?.addEventListener("change", e => { S.alsId = e.target.value; toonWedstrijd(id); });
+  sc.querySelectorAll("[data-plus]").forEach(b => (b.onclick = () => {
+    const g = groepen.find(x => x.k === b.dataset.plus);
+    const r = g?.vrij[0];
+    if (!r) return;
+    doe(() => sb.from("claims").insert({ transactie_id: r.transactie_id, deelnemer_id: als.id, regel_id: r.id, bedrag: r.bedrag }), "Toevoegen");
   }));
-  s.querySelectorAll("form[data-claim]").forEach(f => (f.onsubmit = async e => {
+  sc.querySelectorAll("[data-min]").forEach(b => (b.onclick = () => {
+    const g = groepen.find(x => x.k === b.dataset.min);
+    const r = g?.mijn[g.mijn.length - 1];
+    if (!r) return;
+    doe(() => sb.from("claims").delete().eq("id", opRegel.get(r.id).id), "Weghalen");
+  }));
+  sc.querySelectorAll("form[data-claim]").forEach(f => (f.onsubmit = e => {
     e.preventDefault();
     const bedrag = leesBedrag(new FormData(f).get("bedrag"));
     if (!(bedrag > 0)) return toast("Vul een bedrag in, bijvoorbeeld 5,90.");
-    const { error } = await sb.from("claims").insert({ transactie_id: f.dataset.claim, deelnemer_id: als.id, bedrag });
-    if (error) return fout(error, "Claimen");
-    verversEnToon();
+    if (centen(bedrag) > centen(f.dataset.max)) return toast(`Er is nog maar ${euro(f.dataset.max)} vrij.`);
+    doe(() => sb.from("claims").insert({ transactie_id: f.dataset.claim, deelnemer_id: als.id, bedrag }), "Claimen");
   }));
-  s.querySelectorAll("[data-rest]").forEach(b => (b.onclick = async () => {
-    const { error } = await sb.from("claims").insert({ transactie_id: b.dataset.rest, deelnemer_id: als.id, bedrag: Number(b.dataset.vrij) });
-    if (error) return fout(error, "Claimen");
-    verversEnToon();
-  }));
-  s.querySelectorAll("[data-weg]").forEach(b => (b.onclick = async () => {
-    const { error } = await sb.from("claims").delete().eq("id", b.dataset.weg);
-    if (error) return fout(error, "Weghalen");
-    verversEnToon();
-  }));
-  s.querySelectorAll("[data-wegt]").forEach(b => (b.onclick = async () => {
+  sc.querySelectorAll("[data-rest]").forEach(b => (b.onclick = () =>
+    doe(() => sb.from("claims").insert({ transactie_id: b.dataset.rest, deelnemer_id: als.id, bedrag: Number(b.dataset.vrij) }), "Claimen")));
+  sc.querySelectorAll("[data-weg]").forEach(b => (b.onclick = () =>
+    doe(() => sb.from("claims").delete().eq("id", b.dataset.weg), "Weghalen")));
+  sc.querySelectorAll("[data-wegt]").forEach(b => (b.onclick = () => {
     if (!confirm("Deze aankoop en alle claims erop verwijderen?")) return;
-    const { error } = await sb.from("transacties").delete().eq("id", b.dataset.wegt);
-    if (error) return fout(error, "Verwijderen");
-    verversEnToon();
+    doe(() => sb.from("transacties").delete().eq("id", b.dataset.wegt), "Verwijderen");
   }));
+  $("#niets")?.addEventListener("click", () => {
+    try { localStorage.setItem(nietsSleutel(id), "1"); } catch { /* niet erg */ }
+    toast("Genoteerd: niets bij deze wedstrijd");
+    location.hash = "home";
+  });
 }
 
 // ---------------------------------------------------------------------
