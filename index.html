@@ -300,6 +300,28 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 .sleutel { word-break: break-all; font-size: .85rem; }
 .label.tweestap { background: color-mix(in srgb, var(--groen) 18%, var(--vlak)); color: var(--groen); }
 
+/* Deelnemers als uitklaplijst */
+.teller { display: inline-block; min-width: 26px; padding: 1px 8px; border-radius: 999px; background: var(--achter); font-family: var(--romp); font-size: .9rem; font-weight: 600; text-align: center; vertical-align: middle; margin-left: 6px; }
+.accordeon { display: grid; gap: 8px; }
+.accordeon details { border: 1px solid var(--lijn); border-radius: 12px; background: var(--vlak); overflow: hidden; }
+.accordeon summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 10px 12px; cursor: pointer; }
+.accordeon summary::-webkit-details-marker { display: none; }
+.accordeon summary .groei { flex: 1; min-width: 0; }
+.accordeon summary .groei b { display: block; }
+.accordeon summary .pijl { width: 20px; height: 20px; color: var(--grijs); transition: transform .15s; flex: none; }
+.accordeon details[open] summary .pijl { transform: rotate(180deg); }
+.accordeon details[open] summary { border-bottom: 1px solid var(--lijn); }
+.accordeon .binnen { padding: 12px; display: grid; gap: 12px; }
+.accordeon .info { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; }
+.accordeon .rollen { display: grid; gap: 10px; justify-items: end; }
+.accordeon .rollen label { display: flex; gap: 10px; align-items: center; font-weight: 600; font-size: .95rem; }
+.accordeon .rollen input { width: 22px; height: 22px; min-height: 0; accent-color: var(--rood); }
+.chip-slot { display: inline-flex; gap: 6px; align-items: center; border-radius: 999px; padding: 3px 10px; font-size: .8rem; font-weight: 600;
+  background: color-mix(in srgb, var(--groen) 16%, var(--vlak)); color: var(--groen); }
+.chip-slot.uit { background: color-mix(in srgb, var(--goud) 22%, var(--vlak)); color: var(--inkt); }
+.label.rol { background: color-mix(in srgb, var(--rood) 12%, var(--vlak)); color: var(--rood); }
+@media (prefers-color-scheme: dark) { .label.rol { color: #FF6B7D; } }
+
 /* Melding */
 #toast {
   position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
@@ -333,7 +355,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.10";
+const VERSIE = "2026-11-09.11";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -428,9 +450,15 @@ async function laad() {
   S.ik = S.deelnemers.find(d => d.user_id === S.user.id) || null;
   if (!S.alsId || !deelnemer(S.alsId)) S.alsId = S.ik?.id || null;
   S.metMfa = new Set();
+  S.laatst = {};
   if (S.ik?.is_beheerder) {
-    const { data } = await sb.rpc("deelnemers_met_mfa");
-    S.metMfa = new Set((data || []).map(x => (typeof x === "string" ? x : Object.values(x)[0])));
+    const { data, error } = await sb.rpc("beheer_accounts");
+    if (!error && Array.isArray(data)) {
+      data.forEach(a => { if (a.tweestap) S.metMfa.add(a.deelnemer_id); S.laatst[a.deelnemer_id] = a.laatst_ingelogd; });
+    } else {
+      const { data: m } = await sb.rpc("deelnemers_met_mfa");
+      S.metMfa = new Set((m || []).map(x => (typeof x === "string" ? x : Object.values(x)[0])));
+    }
   }
 }
 function verbergNavigatie() {
@@ -1162,28 +1190,45 @@ ${S.ik.naam}`;
 }
 
 function admDeelnemers(box) {
-  box.innerHTML = S.deelnemers.map(d => {
-    const status = d.user_id ? "Heeft een account" : d.email ? "Uitgenodigd, nog geen account" : "Nog geen e-mailadres";
+  const pijl = `<svg class="pijl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
+  const datum = t => new Date(t).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" });
+  box.innerHTML = `<div class="vlak"><h3>Deelnemers<span class="teller">${S.deelnemers.length}</span></h3>
+    <div class="accordeon">` + S.deelnemers.map(d => {
     const mfa = S.metMfa.has(d.id);
-    return `<form class="vlak" data-d="${d.id}">
-      <div class="persoon">${avatar(d.id, 36)}
-        <span><b>${esc(d.naam)}</b><br><span class="klein muted">${status}</span>
-          ${mfa ? ` <span class="label tweestap">Tweestap aan</span>` : d.is_beheerder && d.user_id ? ` <span class="label let">Tweestap nog niet ingesteld</span>` : ""}</span></div>
-      <div class="rij">
-        <label class="veld"><span>E-mailadres</span><input name="email" type="email" value="${esc(d.email || "")}" ${d.user_id ? "readonly" : ""}></label>
-        <label class="veld" style="max-width:120px"><span>Inleg</span><input name="inleg" inputmode="decimal" value="${String(d.inleg).replace(".", ",")}"></label>
-      </div>
-      <div class="knoppen klein" style="gap:20px">
-        <label><input type="checkbox" name="actief" ${d.actief ? "checked" : ""} style="width:auto;min-height:0"> Actief</label>
-        <label><input type="checkbox" name="beheerder" ${d.is_beheerder ? "checked" : ""} ${d.id === S.ik.id ? "disabled" : ""} style="width:auto;min-height:0"> Beheerder</label>
-      </div>
-      <div class="knoppen">
-        <button class="knop">Opslaan</button>
-        ${!d.user_id ? `<button type="button" class="knop licht" data-nodig="${d.id}">Opslaan en uitnodigen</button>` : ""}
-        ${mfa && d.id !== S.ik.id ? `<button type="button" class="tekstknop" data-mfauit="${d.id}">Tweestapsverificatie uitzetten</button>` : ""}
-      </div>
-    </form>`;
-  }).join("") + `
+    const ik = d.id === S.ik.id;
+    const sub = d.user_id ? esc(d.email || "") : d.email ? "Uitgenodigd, nog geen account" : "Nog geen e-mailadres";
+    const laatst = S.laatst[d.id];
+    return `<details data-open="${d.id}" ${S.openDeelnemer === d.id ? "open" : ""}>
+      <summary>${avatar(d.id, 40)}
+        <span class="groei"><b>${esc(d.naam)}${ik ? ` <span class="muted" style="font-weight:400">(jij)</span>` : ""}</b>
+          <span class="klein muted">${sub}</span></span>
+        ${d.is_beheerder ? `<span class="label rol">Beheerder</span>` : ""}${!d.actief ? `<span class="label let">Inactief</span>` : ""}
+        ${pijl}
+      </summary>
+      <form class="binnen" data-d="${d.id}">
+        <div class="info">
+          <div class="stapel" style="gap:6px">
+            ${d.user_id ? `<span class="klein muted">${laatst ? `Laatst ingelogd ${datum(laatst)}` : "Heeft een account"}</span>` : ""}
+            ${d.user_id ? (mfa ? `<span><span class="chip-slot">🔒 Tweestapsverificatie aan</span></span>`
+              : d.is_beheerder ? `<span><span class="chip-slot uit">Tweestapsverificatie nog niet ingesteld</span></span>` : "") : ""}
+          </div>
+          <div class="rollen">
+            <label>Beheerder <input type="checkbox" name="beheerder" ${d.is_beheerder ? "checked" : ""} ${ik ? "disabled" : ""}></label>
+            <label>Actief <input type="checkbox" name="actief" ${d.actief ? "checked" : ""} ${ik ? "disabled" : ""}></label>
+          </div>
+        </div>
+        <div class="twee">
+          ${d.user_id ? "" : `<label class="veld"><span>E-mailadres</span><input name="email" type="email" value="${esc(d.email || "")}"></label>`}
+          <label class="veld"><span>Inleg</span><input name="inleg" inputmode="decimal" value="${String(d.inleg).replace(".", ",")}"></label>
+        </div>
+        <div class="knoppen">
+          <button class="knop">Opslaan</button>
+          ${!d.user_id ? `<button type="button" class="knop licht" data-nodig="${d.id}">Opslaan en uitnodigen</button>` : ""}
+          ${mfa && !ik ? `<button type="button" class="tekstknop" data-mfauit="${d.id}">Tweestapsverificatie uitzetten</button>` : ""}
+        </div>
+      </form>
+    </details>`;
+  }).join("") + `</div></div>
     <form class="vlak" id="nieuw">
       <h3>Deelnemer toevoegen</h3>
       <div class="rij">
@@ -1202,15 +1247,20 @@ function admDeelnemers(box) {
     const inleg = leesBedrag(f.get("inleg"));
     if (!(inleg >= 0)) return toast("Vul een geldige inleg in.");
     if (ookUitnodigen && !email) return toast("Vul eerst een e-mailadres in.");
-    const wijz = { inleg, actief: f.get("actief") === "on" };
+    const wijz = { inleg };
     if (!d.user_id) wijz.email = email;
-    if (id !== S.ik.id) wijz.is_beheerder = f.get("beheerder") === "on";
+    if (id !== S.ik.id) { wijz.is_beheerder = f.get("beheerder") === "on"; wijz.actief = f.get("actief") === "on"; }
+    S.openDeelnemer = id;
     const { error } = await sb.from("deelnemers").update(wijz).eq("id", id);
     if (error) return fout(error, "Opslaan");
     toast("Opgeslagen");
     await verversEnToon();
     if (ookUitnodigen) uitnodigen({ ...d, email });
   };
+  box.querySelectorAll("details[data-open]").forEach(dt => dt.addEventListener("toggle", () => {
+    if (dt.open) S.openDeelnemer = dt.dataset.open;
+    else if (S.openDeelnemer === dt.dataset.open) S.openDeelnemer = null;
+  }));
   box.querySelectorAll("[data-mfauit]").forEach(b => (b.onclick = async () => {
     const d = deelnemer(b.dataset.mfauit);
     if (!confirm(`Tweestapsverificatie van ${d.naam} uitzetten? Doe dit alleen als ${d.naam} zijn telefoon kwijt is.`)) return;
