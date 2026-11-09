@@ -314,7 +314,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.3";
+const VERSIE = "2026-11-09.4";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -545,6 +545,7 @@ function route() {
   if (pad === "mijn") { markeerTab("mijn"); return toonMijn(); }
   if (pad === "profiel") { markeerTab("profiel"); return toonProfiel(); }
   if (pad === "inlezen" && isBeheerder()) { markeerTab("beheer"); return toonInlezen(arg); }
+  if (pad === "verwerken" && arg && isBeheerder()) { markeerTab("beheer"); return toonVerwerken(arg); }
   if (pad === "beheer" && isBeheerder()) { markeerTab("beheer"); return toonBeheer(arg || "deelnemers"); }
   if (pad === "pot") { markeerTab("pot"); return toonPot(); }
   markeerTab("home");
@@ -769,6 +770,13 @@ function toonWedstrijd(id) {
       ? `<button type="button" class="tekstknop" id="niets" style="justify-self:center">Ik had niets bij deze wedstrijd</button>` : ""}
     ${galerijHtml(id)}
     ${isBeheerder() ? `
+      ${(() => {
+        const ov = onverwerkteShots(id);
+        if (!ov.length) return "";
+        const ongelezen = ov.filter(x => !x.uitgelezen).length;
+        return `<div class="status let">${ov.length === 1 ? "Er is 1 screenshot" : `Er zijn ${ov.length} screenshots`} nog niet verwerkt${ongelezen ? `, waarvan ${ongelezen} nog niet uitgelezen` : ""}.
+          <div style="margin-top:8px"><a class="knop" href="#verwerken/${id}" style="text-decoration:none;display:inline-block">Voorstel verwerken</a></div></div>`;
+      })()}
       ${aankopen.length ? `<details class="alle"><summary>Alle aankopen bij deze wedstrijd (${aankopen.length})</summary>
         <ul class="lijst">${aankopen.map(t => `<li><span class="groei">${esc(t.kassa || (t.bron === "spreadsheet" ? "Spreadsheet" : "Aankoop"))}<br>
           <span class="klein muted">${t.tijd ? tijd(t.tijd) + ", " : ""}${S.regels.filter(r => r.transactie_id === t.id).length} artikelen</span></span>
@@ -1363,6 +1371,7 @@ function toonInlezen(wedId) {
       await laad();
       S.voorstel = maakVoorstel(res, shotIds, wed);
       toonVoorstel();
+      $("#inUitkomst").scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (err) {
       status.textContent = "";
       $("#inUitkomst").innerHTML = `<div class="status let">Uitlezen lukte niet: ${esc(err.message)}<br>
@@ -1454,6 +1463,63 @@ function toonVoorstel() {
   $("#voorstelOpslaan").onclick = slaVoorstelOp;
 }
 
+// Screenshots bij een wedstrijd waarvan nog niets is opgeslagen
+function onverwerkteShots(wedId) {
+  return S.screenshots.filter(x => x.wedstrijd_id === wedId && !x.uitgelezen?.verwerkt &&
+    !S.transacties.some(t => t.screenshot_id === x.id));
+}
+
+// Transacties van verschillende screenshots samenvoegen
+function voegSamen(lijst) {
+  const sleutel = t => `${t.soort}|${t.kassa || ""}|${t.datum}|${centen(t.bedrag)}`;
+  const detail = t => (t.tijd ? 1 : 0) + (t.artikelen?.length ? 2 : 0);
+  const uit = [];
+  for (const t of lijst) {
+    const j = uit.findIndex(u => sleutel(u) === sleutel(t) &&
+      (u.bron !== t.bron || !detail(u) || !detail(t)) &&
+      (!u.tijd || !t.tijd || u.tijd === t.tijd));
+    if (j < 0) uit.push(t);
+    else if (detail(t) > detail(uit[j])) uit[j] = t;
+  }
+  return uit;
+}
+
+async function toonVerwerken(wedId) {
+  const w = S.wedstrijden.find(x => x.id === wedId);
+  titel("Voorstel verwerken", `wedstrijd/${wedId}`);
+  scherm().innerHTML = `
+    <div class="vlak"><h3>${esc(w?.tegenstander || "Wedstrijd")}</h3>
+      <p class="klein muted" id="inStatus" role="status">Voorstel maken…</p></div>
+    <div id="inUitkomst" class="stapel"></div>`;
+  const status = $("#inStatus");
+  let shots = onverwerkteShots(wedId);
+  const ongelezen = shots.filter(x => !x.uitgelezen);
+  if (ongelezen.length) {
+    status.textContent = "De AI leest de screenshots uit… dit duurt meestal 10 tot 30 seconden.";
+    try {
+      await roepFunctie("kaart-lezen", { paden: ongelezen.map(x => x.pad) });
+      await laad();
+      shots = onverwerkteShots(wedId);
+    } catch (err) {
+      fout(err, "Uitlezen");
+    }
+  }
+  const gelezen = shots.filter(x => x.uitgelezen);
+  if (!gelezen.length) {
+    status.textContent = "Er is niets om te verwerken.";
+    return;
+  }
+  const saldi = gelezen.filter(x => x.uitgelezen.saldo !== null && x.uitgelezen.saldo !== undefined);
+  const res = {
+    saldo: saldi.length ? Number(saldi[saldi.length - 1].uitgelezen.saldo) : null,
+    transacties: voegSamen(gelezen.flatMap((x, i) => (x.uitgelezen.transacties || []).map(t => ({ ...t, bron: i })))),
+  };
+  const modellen = [...new Set(gelezen.map(x => x.uitgelezen.model).filter(Boolean))].join(", ");
+  status.textContent = `${gelezen.length} ${gelezen.length === 1 ? "screenshot" : "screenshots"}, uitgelezen door ${modellen || "de AI"}.`;
+  S.voorstel = maakVoorstel(res, gelezen.map(x => x.id), wedId);
+  toonVoorstel();
+}
+
 async function slaVoorstelOp() {
   const V = S.voorstel;
   const knop = $("#voorstelOpslaan");
@@ -1497,6 +1563,11 @@ async function slaVoorstelOp() {
         if (t.soort === "aankoop") wedPerShot[t.bron] ??= r.wedId;
       }
       n++;
+    }
+    // Screenshots als verwerkt markeren
+    for (const sid of V.shotIds.filter(Boolean)) {
+      const sh = S.screenshots.find(x => x.id === sid);
+      await sb.from("screenshots").update({ uitgelezen: { ...(sh?.uitgelezen || {}), verwerkt: true } }).eq("id", sid);
     }
     // Screenshots verhuizen naar de wedstrijd waar hun aankopen bij horen
     for (const [bron, wid] of Object.entries(wedPerShot)) {
