@@ -314,7 +314,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.5";
+const VERSIE = "2026-11-09.6";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -505,7 +505,7 @@ function markeerTab(k) {
 // Menu linksboven
 function bouwMenu() {
   const items = [["home", "Home"], ["wedstrijden", "Wedstrijden"], ["mijn", "Mijn verbruik"], ["pot", "De pot"]];
-  if (isBeheerder()) items.push(["beheer", "Beheer"], ["inlezen", "Screenshots inlezen"]);
+  if (isBeheerder()) items.push(["beheer", "Beheer"]);
   $("#menuPaneel").innerHTML = `
     <div class="menu-wie"><span class="letters" style="background:${kleur(S.ik.id)}">${esc(letters(S.ik.id))}</span>
       <span><b>${esc(S.ik.naam)}</b><br><span class="klein muted">${esc(S.user.email)}</span></span></div>
@@ -543,7 +543,7 @@ function route() {
   if (pad === "wedstrijden") { markeerTab("wedstrijden"); return toonWedstrijden(); }
   if (pad === "mijn") { markeerTab("mijn"); return toonMijn(); }
   if (pad === "profiel") { markeerTab("profiel"); return toonProfiel(); }
-  if (pad === "inlezen" && isBeheerder()) { markeerTab("beheer"); return toonInlezen(arg); }
+  if (pad === "inlezen" && arg && isBeheerder()) { markeerTab("wedstrijden"); return toonInlezen(arg); }
   if (pad === "verwerken" && arg && isBeheerder()) { markeerTab("beheer"); return toonVerwerken(arg); }
   if (pad === "beheer" && isBeheerder()) { markeerTab("beheer"); return toonBeheer(arg || "deelnemers"); }
   if (pad === "pot") { markeerTab("pot"); return toonPot(); }
@@ -590,8 +590,7 @@ function kaartHtml() {
 function toonHome() {
   titel("Vestekaart");
   const s = S.saldo.find(x => x.id === S.ik.id) || {};
-  const gemeld = Number(s.gemeld || 0);
-  const open = Number(s.openstaand) - gemeld;
+  const open = Number(s.openstaand);
   const nu = vandaag();
   const teDoen = S.wedstrijden
     .filter(w => w.datum <= nu && Number(w.open) > 0)
@@ -615,10 +614,8 @@ function toonHome() {
       ? `<a class="vlak mijnopen" href="#mijn">
           <span class="klein muted">Jij hebt nog open staan</span>
           <span class="groot">${euro(open)}</span>
-          <span class="klein">Maak het over naar de rekening en meld het onder Mijn.</span></a>`
-      : centen(gemeld) > 0
-        ? `<div class="status let">Je overboeking van ${euro(gemeld)} wacht op bevestiging.</div>`
-        : `<div class="status goed">Je hebt niets open staan.</div>`}
+          <span class="klein">Maak het over naar de rekening en geef het door onder Mijn.</span></a>`
+      : `<div class="status goed">Je hebt niets open staan.</div>`}
     ${teDoen.length
       ? `<div class="stapel"><h3>Geef aan wat je had</h3><div class="tickets">${teDoen.map(kaartje).join("")}</div></div>`
       : ""}`;
@@ -781,8 +778,7 @@ function toonWedstrijd(id) {
           <span class="klein muted">${t.tijd ? tijd(t.tijd) + ", " : ""}${S.regels.filter(r => r.transactie_id === t.id).length} artikelen</span></span>
           <span class="getal">${euro(t.bedrag)}</span>
           <button class="knop klein licht" data-wegt="${t.id}" aria-label="Aankoop verwijderen">×</button></li>`).join("")}</ul></details>` : ""}
-      <div class="knoppen"><a class="knop" href="#inlezen/${id}" style="text-decoration:none">Screenshots inlezen</a>
-        <a class="knop licht" href="#beheer/kaart" style="text-decoration:none">Zelf invoeren</a></div>` : ""}`;
+      ${w.datum <= vandaag() ? `<div class="knoppen"><a class="knop" href="#inlezen/${id}" style="text-decoration:none">Screenshots inlezen</a></div>` : ""}` : ""}`;
   vulPlaatjes(scherm());
 
   const sc = scherm();
@@ -844,7 +840,8 @@ function toonMijn() {
     return { w, som };
   }).filter(x => x.som > 0).reverse();
   const mijnBet = S.betalingen.filter(b => b.deelnemer_id === S.ik.id);
-  const open = Number(s.openstaand) - Number(s.gemeld || 0);
+  const open = Number(s.openstaand);
+  const recent = b => Date.now() - new Date(b.created_at).getTime() < 7 * 24 * 3600 * 1000;
 
   scherm().innerHTML = `
     <div class="vlak">
@@ -853,28 +850,27 @@ function toonMijn() {
         <span class="klein muted">Overgemaakt<b class="getal" style="color:var(--inkt)">${euro(s.overgemaakt)}</b></span>
         <span class="klein muted">Open<b class="getal ${Number(s.openstaand) > 0 ? "open" : ""}" style="${Number(s.openstaand) > 0 ? "" : "color:var(--inkt)"}">${euro(s.openstaand)}</b></span>
       </div>
-      ${Number(s.gemeld) > 0 ? `<p class="klein muted">${euro(s.gemeld)} gemeld als overgemaakt, wacht op bevestiging van Mike.</p>` : ""}
     </div>
     ${centen(open) > 0 ? `<form class="vlak" id="meld">
-      <h3>Overboeking melden</h3>
-      <p class="klein muted">Heb je je verbruik overgemaakt naar de rekening? Meld het hier; Mike bevestigt het zodra het binnen is.</p>
+      <h3>Betaling doorgeven</h3>
+      <p class="klein muted">Heb je je bedrag overgemaakt naar de rekening? Geef het hier door, dan wordt het direct op de rekening bijgeschreven.</p>
       <div class="rij">
         <label class="veld"><span>Bedrag</span><input name="bedrag" inputmode="decimal" value="${open.toFixed(2).replace(".", ",")}" required></label>
         <label class="veld"><span>Datum</span><input name="datum" type="date" value="${vandaag()}" required></label>
       </div>
-      <button class="knop">Overboeking melden</button></form>` : ""}
+      <button class="knop">Betaling doorgeven</button></form>` : ""}
     <div class="vlak"><h3>Mijn verbruik per wedstrijd</h3>
       ${perWedstrijd.length ? `<ul class="lijst">${perWedstrijd.map(({ w, som }) => `<li>
         <a class="groei" href="#wedstrijd/${w.id}">${esc(w.tegenstander)}</a>
         <span class="klein muted">${datumKort(w.datum)}</span><span class="getal">${euro(som)}</span></li>`).join("")}</ul>`
         : `<p class="muted">Nog niets geclaimd. Open een wedstrijd en tik aan wat van jou was.</p>`}
     </div>
-    <div class="vlak"><h3>Mijn overboekingen</h3>
+    <div class="vlak"><h3>Mijn betalingen</h3>
       ${mijnBet.length ? `<ul class="lijst">${mijnBet.map(b => `<li>
-        <span class="groei">${datumKort(b.datum)}<br><span class="klein muted">${b.bevestigd ? "bevestigd" : "wacht op bevestiging"}</span></span>
+        <span class="groei">${datumKort(b.datum)}${b.opmerking ? `<br><span class="klein muted">${esc(b.opmerking)}</span>` : ""}</span>
         <span class="getal">${euro(b.bedrag)}</span>
-        ${!b.bevestigd ? `<button class="knop klein licht" data-intrek="${b.id}">Intrekken</button>` : ""}</li>`).join("")}</ul>`
-        : `<p class="muted">Nog geen overboekingen.</p>`}
+        ${recent(b) && !b.opmerking ? `<button class="knop klein licht" data-intrek="${b.id}">Intrekken</button>` : ""}</li>`).join("")}</ul>`
+        : `<p class="muted">Nog geen betalingen.</p>`}
     </div>
     `;
 
@@ -884,11 +880,12 @@ function toonMijn() {
     const bedrag = leesBedrag(f.get("bedrag"));
     if (!(bedrag > 0)) return toast("Vul een bedrag in.");
     const { error } = await sb.from("betalingen").insert({ deelnemer_id: S.ik.id, bedrag, datum: f.get("datum") });
-    if (error) return fout(error, "Melden");
-    toast("Overboeking gemeld");
+    if (error) return fout(error, "Doorgeven");
+    toast("Betaling bijgeschreven op de rekening");
     verversEnToon();
   });
   scherm().querySelectorAll("[data-intrek]").forEach(b => (b.onclick = async () => {
+    if (!confirm("Deze betaling intrekken?")) return;
     const { error } = await sb.from("betalingen").delete().eq("id", b.dataset.intrek);
     if (error) return fout(error, "Intrekken");
     verversEnToon();
@@ -1026,43 +1023,29 @@ function admDeelnemers(box) {
 }
 
 function admBetalingen(box) {
-  const gemeld = S.betalingen.filter(b => !b.bevestigd);
-  const bevestigd = S.betalingen.filter(b => b.bevestigd).slice(0, 30);
+  const lijst = S.betalingen.slice(0, 50);
   const opties = S.deelnemers.filter(d => d.actief).map(d => `<option value="${d.id}">${esc(d.naam)}</option>`).join("");
   box.innerHTML = `
-    <div class="vlak"><h3>Te bevestigen</h3>
-      ${gemeld.length ? `<ul class="lijst">${gemeld.map(b => `<li>
-        <span class="stip" style="background:${kleur(b.deelnemer_id)}"></span>
-        <span class="groei">${esc(deelnemer(b.deelnemer_id)?.naam)}<br><span class="klein muted">${datumKort(b.datum)}</span></span>
-        <span class="getal">${euro(b.bedrag)}</span>
-        <button class="knop klein" data-ok="${b.id}">Bevestigen</button>
-        <button class="knop klein licht" data-weg="${b.id}" aria-label="Verwijderen">×</button></li>`).join("")}</ul>`
-        : `<p class="muted">Geen meldingen om te bevestigen.</p>`}
-    </div>
     <form class="vlak" id="betaling">
-      <h3>Overboeking invoeren</h3>
+      <h3>Betaling invoeren</h3>
+      <p class="klein muted">Deelnemers geven hun betaling zelf door onder Mijn. Hier voer je er een in voor iemand anders.</p>
       <div class="rij">
         <label class="veld"><span>Van</span><select name="wie">${opties}</select></label>
         <label class="veld"><span>Bedrag</span><input name="bedrag" inputmode="decimal" required></label>
         <label class="veld"><span>Datum</span><input name="datum" type="date" value="${vandaag()}" required></label>
       </div>
-      <button class="knop">Invoeren als bevestigd</button>
+      <button class="knop" style="justify-self:start">Invoeren</button>
     </form>
-    <div class="vlak"><h3>Bevestigd</h3>
-      <ul class="lijst">${bevestigd.map(b => `<li>
+    <div class="vlak"><h3>Betalingen op de rekening</h3>
+      ${lijst.length ? `<ul class="lijst">${lijst.map(b => `<li>
         <span class="stip" style="background:${kleur(b.deelnemer_id)}"></span>
         <span class="groei">${esc(deelnemer(b.deelnemer_id)?.naam)}<br><span class="klein muted">${datumKort(b.datum)}${b.opmerking ? `, ${esc(b.opmerking)}` : ""}</span></span>
         <span class="getal">${euro(b.bedrag)}</span>
-        <button class="knop klein licht" data-weg="${b.id}" aria-label="Verwijderen">×</button></li>`).join("")}</ul>
+        <button class="knop klein licht" data-weg="${b.id}" aria-label="Verwijderen">×</button></li>`).join("")}</ul>`
+        : `<p class="muted">Nog geen betalingen.</p>`}
     </div>`;
-  box.querySelectorAll("[data-ok]").forEach(b => (b.onclick = async () => {
-    const { error } = await sb.from("betalingen").update({ bevestigd: true }).eq("id", b.dataset.ok);
-    if (error) return fout(error, "Bevestigen");
-    toast("Bevestigd");
-    verversEnToon();
-  }));
   box.querySelectorAll("[data-weg]").forEach(b => (b.onclick = async () => {
-    if (!confirm("Deze overboeking verwijderen?")) return;
+    if (!confirm("Deze betaling verwijderen?")) return;
     const { error } = await sb.from("betalingen").delete().eq("id", b.dataset.weg);
     if (error) return fout(error, "Verwijderen");
     verversEnToon();
@@ -1074,7 +1057,7 @@ function admBetalingen(box) {
     if (!(bedrag > 0)) return toast("Vul een bedrag in.");
     const { error } = await sb.from("betalingen").insert({ deelnemer_id: f.get("wie"), bedrag, datum: f.get("datum"), bevestigd: true });
     if (error) return fout(error, "Invoeren");
-    toast("Overboeking ingevoerd");
+    toast("Betaling ingevoerd");
     verversEnToon();
   };
 }
@@ -1097,69 +1080,30 @@ function wedstrijdBijDatum(d) {
 }
 
 function admKaart(box) {
-  const nu = vandaag();
-  const gespeeld = S.wedstrijden.filter(w => w.datum <= nu).reverse();
   const opw = S.transacties.filter(t => t.soort === "opwaardering").slice().reverse();
   box.innerHTML = `
-    <div class="vlak"><h3>Screenshots inlezen</h3>
-      <p class="klein muted">Upload screenshots van de Transactie Geschiedenis; de AI leest de aankopen en artikelen uit.</p>
-      <a class="knop" href="#inlezen" style="justify-self:start;text-decoration:none">Screenshots inlezen</a></div>
-    <form class="vlak" id="aankoop">
-      <h3>Aankoop toevoegen</h3>
-      <label class="veld"><span>Wedstrijd</span><select name="wed">${gespeeld.map(w => `<option value="${w.id}">${datumKort(w.datum)}, ${esc(w.tegenstander)}</option>`).join("")}</select></label>
-      <div class="rij">
-        <label class="veld"><span>Kassa</span><input name="kassa" placeholder="C1-O-1-S1-PIN-11.1"></label>
-        <label class="veld" style="max-width:130px"><span>Tijd</span><input name="tijd" type="time"></label>
-        <label class="veld" style="max-width:130px"><span>Bedrag</span><input name="bedrag" inputmode="decimal" required></label>
-      </div>
-      <label class="veld"><span>Artikelen (mag leeg), één per regel, bijvoorbeeld: 3x Grolsch groot 5,90</span><textarea name="regels"></textarea></label>
-      <button class="knop">Aankoop toevoegen</button>
-    </form>
+    ${kaartHtml()}
     <form class="vlak" id="opwaardering">
-      <h3>Opwaardering toevoegen</h3>
+      <h3>Kaart opwaarderen</h3>
+      <p class="klein muted">Het bedrag gaat van de rekening naar de kaart.</p>
       <div class="rij">
-        <label class="veld"><span>Datum</span><input name="datum" type="date" value="${nu}" required></label>
+        <label class="veld"><span>Datum</span><input name="datum" type="date" value="${vandaag()}" required></label>
         <label class="veld"><span>Bedrag</span><input name="bedrag" inputmode="decimal" required></label>
-        <button class="knop">Toevoegen</button>
+        <button class="knop">Opwaarderen</button>
       </div>
     </form>
     <div class="vlak"><h3>Opwaarderingen</h3>
       <ul class="lijst">${opw.map(t => `<li><span class="groei">${datumKort(t.datum)}</span><span class="getal">${euro(t.bedrag)}</span>
         <button class="knop klein licht" data-wegt="${t.id}" aria-label="Verwijderen">×</button></li>`).join("")}</ul>
     </div>`;
-
-  $("#aankoop").onsubmit = async e => {
-    e.preventDefault();
-    const f = new FormData(e.target);
-    const bedrag = leesBedrag(f.get("bedrag"));
-    if (!(bedrag > 0)) return toast("Vul het bedrag van de aankoop in.");
-    let regels;
-    try { regels = leesRegels(f.get("regels")); } catch (err) { return toast(err.message); }
-    if (regels.length && centen(regels.reduce((s, r) => s + r.bedrag, 0)) !== centen(bedrag)) {
-      return toast(`De artikelen tellen op tot ${euro(regels.reduce((s, r) => s + r.bedrag, 0))}, niet ${euro(bedrag)}.`);
-    }
-    const w = S.wedstrijden.find(x => x.id === f.get("wed"));
-    const { data: t, error } = await sb.from("transacties").insert({
-      soort: "aankoop", wedstrijd_id: w.id, datum: w.datum, tijd: f.get("tijd") || null,
-      kassa: String(f.get("kassa") || "").trim() || null, bedrag, bron: "handmatig",
-    }).select().single();
-    if (error) return fout(error, "Toevoegen");
-    if (regels.length) {
-      const { error: e2 } = await sb.from("transactie_regels").insert(regels.map((r, i) => ({ ...r, transactie_id: t.id, volgorde: i })));
-      if (e2) return fout(e2, "Artikelen opslaan");
-    }
-    toast("Aankoop toegevoegd");
-    await verversEnToon();
-    location.hash = `wedstrijd/${w.id}`;
-  };
   $("#opwaardering").onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.target);
     const bedrag = leesBedrag(f.get("bedrag"));
     if (!(bedrag > 0)) return toast("Vul een bedrag in.");
     const { error } = await sb.from("transacties").insert({ soort: "opwaardering", datum: f.get("datum"), bedrag, bron: "handmatig" });
-    if (error) return fout(error, "Toevoegen");
-    toast("Opwaardering toegevoegd");
+    if (error) return fout(error, "Opwaarderen");
+    toast("Kaart opgewaardeerd");
     verversEnToon();
   };
   box.querySelectorAll("[data-wegt]").forEach(b => (b.onclick = async () => {
@@ -1312,15 +1256,13 @@ async function roepFunctie(naam, body) {
 }
 
 function toonInlezen(wedId) {
-  titel("Screenshots inlezen", wedId ? `wedstrijd/${wedId}` : "beheer/kaart");
-  const nu = vandaag();
-  const gespeeld = S.wedstrijden.filter(w => w.datum <= nu).reverse();
-  const standaard = wedId || gespeeld[0]?.id;
+  const wedstrijd = S.wedstrijden.find(x => x.id === wedId);
+  if (!wedstrijd) { location.hash = "wedstrijden"; return; }
+  titel("Screenshots inlezen", `wedstrijd/${wedId}`);
   scherm().innerHTML = `
     <div class="vlak">
       <p class="klein muted">Maak in de app van FC Twente screenshots van de Transactie Geschiedenis. Tik ook een aankoop aan en maak een screenshot van het venster met de artikelen. Je mag tot 10 screenshots tegelijk kiezen.</p>
-      <label class="veld"><span>Screenshots horen bij</span>
-        <select id="inWed">${gespeeld.map(w => `<option value="${w.id}" ${w.id === standaard ? "selected" : ""}>${datumKort(w.datum)}, ${esc(w.tegenstander)}</option>`).join("")}</select></label>
+      <h3>${esc(wedstrijd.tegenstander)}, ${datumKort(wedstrijd.datum)}</h3>
       <label class="veld"><span>Screenshots</span><input type="file" id="inBest" accept="image/*" multiple></label>
       <div class="galerij" id="inDuim"></div>
       <button class="knop" id="inLees" disabled>Uploaden en uitlezen</button>
@@ -1337,7 +1279,7 @@ function toonInlezen(wedId) {
   };
   $("#inLees").onclick = async () => {
     const knop = $("#inLees"), status = $("#inStatus");
-    const wed = $("#inWed").value;
+    const wed = wedId;
     knop.disabled = true;
     try {
       const paden = [], rijen = [];
@@ -1383,7 +1325,7 @@ function toonInlezen(wedId) {
 
 function maakVoorstel(res, shotIds, wed) {
   const gebruikt = new Set();
-  const regels = res.transacties.map((t, i) => {
+  const regels = res.transacties.filter(t => t.soort === "aankoop").map((t, i) => {
     const bestaand = S.transacties.find(x => !gebruikt.has(x.id) && x.soort === t.soort && x.datum === t.datum &&
       (x.kassa || "") === (t.kassa || "") && centen(x.bedrag) === centen(t.bedrag));
     if (bestaand) gebruikt.add(bestaand.id);
@@ -1454,7 +1396,7 @@ function toonVoorstel() {
       ? `<p class="klein muted">Na opslaan berekent de app ${euro(verwacht)} op de kaart. Het tegoed was niet te zien op de screenshots.</p>`
       : centen(kaart) === centen(verwacht)
         ? `<div class="status goed">Na opslaan klopt de kaart precies: ${euro(verwacht)}, gelijk aan het Privé Tegoed.</div>`
-        : `<div class="status let">Na opslaan berekent de app ${euro(verwacht)}, maar het Privé Tegoed is ${euro(kaart)}. Verschil: ${euro(verwacht - kaart)}. Misschien ontbreekt er een aankoop of opwaardering, of staan er nog oudere aankopen niet in.</div>`;
+        : `<div class="status let">Na opslaan berekent de app ${euro(verwacht)}, maar het Privé Tegoed is ${euro(kaart)}. Verschil: ${euro(verwacht - kaart)}. Misschien ontbreekt er een aankoop, of is een opwaardering nog niet ingevoerd onder Beheer, Kaart.</div>`;
   };
   saldoCheck();
   box.querySelectorAll("[data-v]").forEach(c => (c.onchange = () => { V.regels[c.dataset.v].aan = c.checked; saldoCheck(); }));
