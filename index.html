@@ -492,7 +492,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-10.3";
+const VERSIE = "2026-11-10.4";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -1654,9 +1654,38 @@ function admDeelnemers(box) {
 }
 
 function admBetalingen(box) {
-  const lijst = S.betalingen.slice(0, 50);
+  // Alleen betalingen sinds we de app gebruiken; de overgenomen spreadsheettotalen apart
+  const viaApp = S.betalingen.filter(b => b.opmerking !== "Totaal uit de spreadsheet");
+  const oud = S.betalingen.filter(b => b.opmerking === "Totaal uit de spreadsheet");
+  const lijst = viaApp;
+  const tijdstip = b => new Date(b.created_at).toLocaleString("nl-NL", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const perPersoon = S.deelnemers.map(d => {
+    const eigen = viaApp.filter(b => b.deelnemer_id === d.id);
+    const sd = S.saldo.find(x => x.id === d.id) || {};
+    return { d, totaal: eigen.reduce((n, b) => n + Number(b.bedrag), 0), aantal: eigen.length,
+             laatst: eigen[0]?.created_at, open: Number(sd.openstaand) || 0 };
+  }).filter(x => x.d.actief || x.aantal);
   const opties = S.deelnemers.filter(d => d.actief).map(d => `<option value="${d.id}">${esc(d.naam)}</option>`).join("");
   box.innerHTML = `
+    <div class="vlak"><h3>Per persoon, via de app</h3>
+      <ul class="lijst">${perPersoon.map(x => `<li>
+        ${avatar(x.d.id, 32)}
+        <span class="groei">${esc(x.d.naam)}<br><span class="klein muted">${x.aantal
+          ? `${x.aantal}× overgemaakt, laatst ${new Date(x.laatst).toLocaleDateString("nl-NL", { day: "numeric", month: "short" })}`
+          : "nog niets via de app"}${centen(x.open) > 0 ? `, <span class="open">nog ${euro(x.open)} open</span>` : ""}</span></span>
+        <span class="getal">${euro(x.totaal)}</span></li>`).join("")}</ul>
+    </div>
+    <div class="vlak"><h3>Alle betalingen via de app</h3>
+      ${lijst.length ? `<ul class="lijst">${lijst.map(b => `<li>
+        ${avatar(b.deelnemer_id, 28)}
+        <span class="groei">${esc(deelnemer(b.deelnemer_id)?.naam)}<br><span class="klein muted">doorgegeven ${tijdstip(b)}${b.datum !== (b.created_at || "").slice(0, 10) ? `, overgemaakt ${datumKort(b.datum)}` : ""}</span></span>
+        <span class="getal">${euro(b.bedrag)}</span>
+        <button class="knop klein licht" data-weg="${b.id}" aria-label="Verwijderen">×</button></li>`).join("")}</ul>`
+        : `<p class="muted">Nog geen betalingen via de app.</p>`}
+    </div>
+    ${oud.length ? `<details class="vlak inklap"><summary><h3>Overgenomen uit de spreadsheet</h3>
+      <svg class="pijl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <div class="inklap-binnen"><ul class="lijst">${oud.map(b => `<li><span class="groei">${esc(deelnemer(b.deelnemer_id)?.naam)}</span><span class="getal">${euro(b.bedrag)}</span></li>`).join("")}</ul></div></details>` : ""}
     <form class="vlak" id="betaling">
       <h3>Betaling invoeren</h3>
       <p class="klein muted">Deelnemers geven hun betaling zelf door onder Mijn. Hier voer je er een in voor iemand anders.</p>
@@ -1666,15 +1695,7 @@ function admBetalingen(box) {
         <label class="veld"><span>Datum</span><input name="datum" type="date" value="${vandaag()}" required></label>
       </div>
       <button class="knop" style="justify-self:start">Invoeren</button>
-    </form>
-    <div class="vlak"><h3>Betalingen op de rekening</h3>
-      ${lijst.length ? `<ul class="lijst">${lijst.map(b => `<li>
-        ${avatar(b.deelnemer_id, 28)}
-        <span class="groei">${esc(deelnemer(b.deelnemer_id)?.naam)}<br><span class="klein muted">${datumKort(b.datum)}${b.opmerking ? `, ${esc(b.opmerking)}` : ""}</span></span>
-        <span class="getal">${euro(b.bedrag)}</span>
-        <button class="knop klein licht" data-weg="${b.id}" aria-label="Verwijderen">×</button></li>`).join("")}</ul>`
-        : `<p class="muted">Nog geen betalingen.</p>`}
-    </div>`;
+    </form>`;
   box.querySelectorAll("[data-weg]").forEach(b => (b.onclick = async () => {
     if (!confirm("Deze betaling verwijderen?")) return;
     const { error } = await sb.from("betalingen").delete().eq("id", b.dataset.weg);
