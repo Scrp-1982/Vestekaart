@@ -22,7 +22,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700;800&family=Playfair+Display:ital,wght@1,500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
 <style>
 :root {
   --rood: #A51225;
@@ -507,7 +507,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-10.7";
+const VERSIE = "2026-11-10.8";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -1830,7 +1830,7 @@ function admBetalingen(box) {
     const f = new FormData(e.target);
     const link = String(f.get("link") || "").trim();
     if (link && !/^https:\/\//.test(link)) return toast("Dat lijkt geen link. Hij begint met https://");
-    if (link && !/tikkie\.me/i.test(link) && !confirm("Dit lijkt geen Tikkie-link. Toch opslaan?")) return;
+    if (link && !/^https:\/\/(www\.)?tikkie\.me\//i.test(link)) return toast("Alleen een link van tikkie.me kan worden opgeslagen.");
     const rijen = [
       { sleutel: "tikkie_link", waarde: link },
       { sleutel: "tikkie_tot", waarde: String(f.get("tot") || "") },
