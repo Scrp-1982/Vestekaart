@@ -507,7 +507,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-10.8";
+const VERSIE = "2026-11-10.9";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -587,7 +587,7 @@ const isBeheerder = () => !!S.ik?.is_beheerder;
 // ---------------------------------------------------------------------
 async function laad() {
   const r = await Promise.all([
-    sb.from("deelnemers").select("*").order("volgorde").order("naam"),
+    sb.from("deelnemers").select("id, naam, user_id, inleg, is_beheerder, volgorde, actief, created_at, foto_pad").order("volgorde").order("naam"),
     sb.from("v_saldo_deelnemers").select("*"),
     sb.from("v_wedstrijden").select("*").order("datum").order("aanvang", { nullsFirst: false }),
     sb.from("v_pot").select("*").single(),
@@ -618,7 +618,17 @@ async function laad() {
   if (S.ik?.is_beheerder) {
     const { data, error } = await sb.rpc("beheer_accounts");
     if (!error && Array.isArray(data)) {
-      data.forEach(a => { if (a.tweestap) S.metMfa.add(a.deelnemer_id); S.laatst[a.deelnemer_id] = a.laatst_ingelogd; });
+      data.forEach(a => {
+        if (a.tweestap) S.metMfa.add(a.deelnemer_id);
+        S.laatst[a.deelnemer_id] = a.laatst_ingelogd;
+        const d = S.deelnemers.find(x => x.id === a.deelnemer_id);
+        if (d && "email" in a) d.email = a.email;
+      });
+      // Oudere database zonder e-mail in beheer_accounts: rechtstreeks ophalen
+      if (data.length && !("email" in data[0])) {
+        const { data: m } = await sb.from("deelnemers").select("id, email");
+        (m || []).forEach(x => { const d = S.deelnemers.find(y => y.id === x.id); if (d) d.email = x.email; });
+      }
     } else {
       const { data: m } = await sb.rpc("deelnemers_met_mfa");
       S.metMfa = new Set((m || []).map(x => (typeof x === "string" ? x : Object.values(x)[0])));
