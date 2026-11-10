@@ -150,7 +150,12 @@ details.inklap .inklap-binnen { padding: 0 16px 16px; }
 * { box-sizing: border-box; }
 main > .stapel > h3, main > h3, main > .stapel > .klein { color: var(--tekst-achter); }
 html, body { margin: 0; }
+/* De pagina vult altijd het hele scherm, ook als er weinig op staat (zoals op Home).
+   Anders zet de iPhone de onderbalk te hoog en herhaalt hij de achtergrond. */
+html { min-height: 100%; background-color: var(--achter); }
 body {
+  min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--romp);
   font-size: 16px;
   line-height: 1.45;
@@ -492,7 +497,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-10.4";
+const VERSIE = "2026-11-10.5";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
