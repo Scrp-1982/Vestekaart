@@ -10,7 +10,11 @@
 <title>Vestekaart</title>
 <script>
   // Licht of donker van dit apparaat meteen toepassen, zodat er niets verspringt
-  try { var t = localStorage.getItem("vestekaart-thema"); if (t === "licht" || t === "donker") document.documentElement.dataset.thema = t; } catch (e) {}
+  try {
+    var t = localStorage.getItem("vestekaart-thema");
+    t = t === "donker" ? "zwart" : t;
+    if (["licht", "wit", "zwart", "rood", "ruit"].indexOf(t) >= 0) document.documentElement.dataset.thema = t;
+  } catch (e) {}
 </script>
 <link rel="icon" type="image/png" href="logo.png">
 <link rel="apple-touch-icon" href="logo.png">
@@ -36,50 +40,115 @@
   --kop: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
   --romp: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
   --rood-tekst: #A51225;
+  --achter-beeld: none;
+  --kop-verloop: var(--rood-verloop);
+  --kop-rand: 0;
+  --tekst-achter: var(--inkt);
   color-scheme: light;
 }
-/* Donker: automatisch volgens de telefoon, of zelf gekozen onder Profiel */
+/* Weergave per shirt. Automatisch: wit of zwart volgens de telefoon. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-thema="licht"]) {
-    --inkt: #E9EBF0;
-    --grijs: #9BA1AE;
-    --lijn: #353944;
-    --vlak: #22252D;
-    --achter: #17191F;
+  :root:not([data-thema]) {
+    --inkt: #ECECEF;
+    --grijs: #9A9AA3;
+    --lijn: #2E2E34;
+    --vlak: #1B1B1F;
+    --achter: #0E0E10;
     --groen: #3DBE85;
-    --rood: #B5162A;
+    --rood: #C21A30;
     --rood-tekst: #FF6B7D;
+    --achter-beeld: linear-gradient(180deg, rgba(194, 26, 48, .16), transparent 260px);
+    --kop-verloop: linear-gradient(100deg, #0E0E10 0%, #1B1B1F 55%, #3A0A10 100%);
+    --kop-rand: 3px solid #C21A30;
+    --tekst-achter: #ECECEF;
     color-scheme: dark;
   }
 }
-:root[data-thema="donker"] {
-    --inkt: #E9EBF0;
-    --grijs: #9BA1AE;
-    --lijn: #353944;
-    --vlak: #22252D;
-    --achter: #17191F;
-    --groen: #3DBE85;
-    --rood: #B5162A;
-    --rood-tekst: #FF6B7D;
-    color-scheme: dark;
+/* Zwart shirt: zwart met rode accenten */
+:root[data-thema="zwart"] {
+  --inkt: #ECECEF;
+  --grijs: #9A9AA3;
+  --lijn: #2E2E34;
+  --vlak: #1B1B1F;
+  --achter: #0E0E10;
+  --groen: #3DBE85;
+  --rood: #C21A30;
+  --rood-tekst: #FF6B7D;
+  --achter-beeld: linear-gradient(180deg, rgba(194, 26, 48, .16), transparent 260px);
+  --kop-verloop: linear-gradient(100deg, #0E0E10 0%, #1B1B1F 55%, #3A0A10 100%);
+  --kop-rand: 3px solid #C21A30;
+  --tekst-achter: #ECECEF;
+  color-scheme: dark;
 }
-.kleurkeuze { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+/* Licht (standaard): geen extra regels, alleen nooit donker */
+/* Wit shirt: wit met twee rode banen door het midden */
+:root[data-thema="wit"] {
+  --achter: #F4F4F5;
+  --achter-beeld: linear-gradient(90deg,
+    transparent calc(50% - 36px),
+    rgba(142, 15, 33, .85) calc(50% - 36px), rgba(142, 15, 33, .85) calc(50% - 12px),
+    rgba(215, 25, 47, .85) calc(50% - 12px), rgba(215, 25, 47, .85) calc(50% + 36px),
+    transparent calc(50% + 36px));
+}
+/* Op de rode baan blijven tussenkopjes leesbaar */
+:root[data-thema="wit"] main > .stapel > h3 {
+  justify-self: start; background: var(--achter); padding: 2px 10px; margin-left: -10px; border-radius: 0 8px 8px 0;
+}
+/* Rood shirt: egaal rood */
+:root[data-thema="rood"] {
+  --achter: #C3182F;
+  --kop-verloop: linear-gradient(100deg, #3A0A10 0%, #6E0D18 55%, #8E0F21 100%);
+  --tekst-achter: #FFFFFF;
+}
+/* Ruitjesshirt: donkerblauw met groene en blauwe ruit */
+:root[data-thema="ruit"] {
+  --inkt: #EEF1F8;
+  --grijs: #A3ACC6;
+  --lijn: #34406A;
+  --vlak: #1F2949;
+  --achter: #161D36;
+  --groen: #3DBE85;
+  --rood: #C8102E;
+  --rood-tekst: #FF7A8A;
+  --achter-beeld:
+    repeating-linear-gradient(0deg, transparent 0 46px, rgba(255, 255, 255, .10) 46px 48px, transparent 48px 96px),
+    repeating-linear-gradient(90deg, transparent 0 46px, rgba(255, 255, 255, .10) 46px 48px, transparent 48px 96px),
+    repeating-linear-gradient(0deg, rgba(34, 120, 92, .45) 0 22px, transparent 22px 96px),
+    repeating-linear-gradient(90deg, rgba(34, 120, 92, .45) 0 22px, transparent 22px 96px),
+    repeating-linear-gradient(0deg, transparent 0 66px, rgba(0, 0, 0, .28) 66px 80px, transparent 80px 96px),
+    repeating-linear-gradient(90deg, transparent 0 66px, rgba(0, 0, 0, .28) 66px 80px, transparent 80px 96px);
+  --kop-verloop: linear-gradient(100deg, #0D1330 0%, #1A2342 60%, #24305A 100%);
+  --tekst-achter: #EEF1F8;
+  color-scheme: dark;
+}
+.shirtkeuze { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.shirtkeuze button {
+  border: 2px solid var(--lijn); background: var(--achter); border-radius: 12px; padding: 8px 4px 8px;
+  cursor: pointer; display: grid; justify-items: center; gap: 4px; font-weight: 600; color: var(--inkt);
+}
+.shirtkeuze button.aan { border-color: var(--rood); box-shadow: 0 0 0 1px var(--rood); background: var(--vlak); }
+.shirtkeuze .shirt { width: 100%; max-width: 72px; height: auto; filter: drop-shadow(0 2px 3px rgba(0,0,0,.2)); }
+.zonder { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.zonder button { border: 2px solid var(--lijn); background: var(--vlak); color: var(--inkt); border-radius: 999px; padding: 4px 12px; font-weight: 600; cursor: pointer; }
+.zonder button.aan { border-color: var(--rood); color: var(--rood-tekst); }
+.kleurkeuze { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
 .kleurkeuze button {
   border: 2px solid var(--lijn); background: var(--vlak); border-radius: 12px; padding: 0 0 10px;
   overflow: hidden; cursor: pointer; display: grid; gap: 8px; font-weight: 600; color: var(--inkt);
 }
 .kleurkeuze button.aan { border-color: var(--rood); box-shadow: 0 0 0 1px var(--rood); }
 .kleurkeuze .staal { height: 46px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; border-bottom: 1px solid var(--lijn); }
-.kleurkeuze .staal span { width: 34px; height: 14px; border-radius: 7px; background: #A51225; }
 
 * { box-sizing: border-box; }
+main > .stapel > h3, main > h3, main > .stapel > .klein { color: var(--tekst-achter); }
 html, body { margin: 0; }
 body {
   font-family: var(--romp);
   font-size: 16px;
   line-height: 1.45;
   color: var(--inkt);
-  background: var(--achter);
+  background-color: var(--achter);
+  background-image: var(--achter-beeld);
   padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   -webkit-text-size-adjust: 100%;
 }
@@ -96,7 +165,8 @@ h3 { font-size: 1.25rem; }
 
 /* Kop */
 header.balk {
-  background: var(--rood-verloop);
+  background: var(--kop-verloop);
+  border-bottom: var(--kop-rand);
   color: var(--tekst-op-rood);
   padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px;
   position: sticky; top: 0; z-index: 10;
@@ -414,7 +484,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.22";
+const VERSIE = "2026-11-10.1";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -628,17 +698,48 @@ function zetThema(t) {
   else delete document.documentElement.dataset.thema;
   try { localStorage.setItem("vestekaart-thema", t); } catch { /* niet erg */ }
 }
+// Shirtkeuze: eenvoudige shirtjes met de kleuren en het patroon van elk thema
+const SHIRT_VORM = "M31 12 L41 7 Q50 15 59 7 L69 12 L93 26 L85 45 L74 40 L74 95 L26 95 L26 40 L15 45 L7 26 Z";
+function shirtSvg(k) {
+  const id = `sh-${k}`;
+  const binnen = {
+    wit: `<rect width="100" height="100" fill="#F7F7F8"/><rect x="42" width="7" height="100" fill="#8E0F21"/><rect x="49" width="13" height="100" fill="#D7192F"/>`,
+    zwart: `<rect width="100" height="100" fill="#111114"/>`,
+    rood: `<rect width="100" height="100" fill="#C8102E"/>`,
+    ruit: `<rect width="100" height="100" fill="#18203B"/>
+      ${[0, 26, 52, 78].map(v => `<rect y="${v}" width="100" height="8" fill="#22785C" opacity=".75"/><rect x="${v}" width="8" height="100" fill="#22785C" opacity=".75"/>`).join("")}
+      ${[18, 44, 70, 96].map(v => `<rect y="${v}" width="100" height="1.6" fill="#9FB0E0" opacity=".55"/><rect x="${v}" width="1.6" height="100" fill="#9FB0E0" opacity=".55"/>`).join("")}
+      ${[12, 38, 64, 90].map(v => `<rect y="${v}" width="100" height="4" fill="#000" opacity=".3"/><rect x="${v}" width="4" height="100" fill="#000" opacity=".3"/>`).join("")}`,
+  }[k];
+  const bies = { wit: "#D7192F", zwart: "#C8102E", rood: "#FFFFFF", ruit: "#C8102E" }[k];
+  return `<svg viewBox="0 0 100 100" class="shirt" aria-hidden="true">
+    <defs><clipPath id="${id}"><path d="${SHIRT_VORM}"/></clipPath></defs>
+    <g clip-path="url(#${id})">${binnen}</g>
+    <path d="M41 7 Q50 15 59 7" fill="none" stroke="${bies}" stroke-width="3" stroke-linecap="round"/>
+    <path d="M7 26 L15 45 M93 26 L85 45" stroke="${bies}" stroke-width="3" stroke-linecap="round"/>
+    <path d="${SHIRT_VORM}" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="1.2" stroke-linejoin="round"/>
+  </svg>`;
+}
+const SHIRTS = [["wit", "Wit"], ["zwart", "Zwart"], ["rood", "Rood"], ["ruit", "Ruit"]];
+function themaNu() { return document.documentElement.dataset.thema || "auto"; }
+function zetThema(t) {
+  if (t && t !== "auto") document.documentElement.dataset.thema = t;
+  else delete document.documentElement.dataset.thema;
+  try { localStorage.setItem("vestekaart-thema", t); } catch { /* niet erg */ }
+}
 function kleurBlok(el) {
   const nu = themaNu();
-  const keuze = (k, label, staal) => `<button type="button" role="radio" aria-checked="${nu === k}" class="${nu === k ? "aan" : ""}" data-thema="${k}">
-      <span class="staal" style="background:${staal}"><span></span></span>${label}</button>`;
-  el.innerHTML = `<h3>Weergave</h3>
-    <div class="kleurkeuze" role="radiogroup" aria-label="Weergave">
-      ${keuze("licht", "Licht", "linear-gradient(#FFFFFF, #EEF0F3)")}
-      ${keuze("donker", "Donker", "linear-gradient(#22252D, #17191F)")}
-      ${keuze("auto", "Automatisch", "linear-gradient(90deg, #EEF0F3 50%, #17191F 50%)")}
+  el.innerHTML = `<h3>Shirt</h3>
+    <div class="shirtkeuze" role="radiogroup" aria-label="Kies een shirt">
+      ${SHIRTS.map(([k, label]) => `<button type="button" role="radio" aria-checked="${nu === k}" class="${nu === k ? "aan" : ""}" data-thema="${k}">
+        ${shirtSvg(k)}<span>${label}</span></button>`).join("")}
     </div>
-    <p class="klein muted">Automatisch volgt de instelling van je telefoon. Geldt voor dit apparaat.</p>`;
+    <div class="zonder">
+      <span class="klein muted">Zonder shirt:</span>
+      <button type="button" role="radio" aria-checked="${nu === "licht"}" class="${nu === "licht" ? "aan" : ""}" data-thema="licht">Licht</button>
+      <button type="button" role="radio" aria-checked="${nu === "auto"}" class="${nu === "auto" ? "aan" : ""}" data-thema="auto">Automatisch</button>
+    </div>
+    <p class="klein muted">De app neemt de kleuren en het patroon van het gekozen shirt over. Automatisch wordt licht of zwart, net als je telefoon. Geldt voor dit apparaat.</p>`;
   el.querySelectorAll("[data-thema]").forEach(b => (b.onclick = () => { zetThema(b.dataset.thema); kleurBlok(el); }));
 }
 
