@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700;800&family=Playfair+Display:ital,wght@1,500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
 <style>
 :root {
@@ -93,23 +93,38 @@ nav.tabs a {
 }
 nav.tabs a.aan { color: var(--rood); border-top-color: var(--rood); }
 
-/* De kaart */
+/* De kaart: donkerrood met rook, zware kop en een sierlijk saldo */
 .kaart {
-  background: var(--rood);
-  background-image: radial-gradient(circle at 110% -20%, rgba(255,255,255,.18) 0 40%, transparent 41%);
-  color: var(--tekst-op-rood);
-  border-radius: 18px;
-  padding: 20px 20px 18px;
-  aspect-ratio: 1.586 / 1;
-  max-height: 260px;
-  width: 100%;
-  display: flex; flex-direction: column; justify-content: space-between;
-  box-shadow: 0 10px 24px -12px rgba(158, 11, 35, .7);
+  position: relative; overflow: hidden; isolation: isolate;
+  border-radius: 18px; color: #fff; text-align: center;
+  aspect-ratio: 1.586 / 1; max-height: 260px; width: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 10px 18px 50px;
+  background:
+    radial-gradient(120% 90% at 50% 120%, #C8102E 0%, rgba(200,16,46,0) 60%),
+    radial-gradient(60% 50% at 15% 20%, rgba(0,0,0,.45), transparent 70%),
+    radial-gradient(70% 60% at 90% 10%, rgba(20,0,4,.55), transparent 70%),
+    radial-gradient(50% 40% at 70% 70%, rgba(255,90,90,.18), transparent 70%),
+    linear-gradient(160deg, #3a0a10 0%, #7a0e1a 55%, #a51225 100%);
+  box-shadow: 0 10px 24px -12px rgba(90, 6, 18, .8);
 }
-.kaart .naam { font-family: var(--kop); font-size: 1.15rem; font-weight: 600; opacity: .9; }
-.kaart .saldo { font-family: var(--kop); font-size: clamp(2.6rem, 12vw, 3.6rem); font-weight: 700; line-height: 1; }
-.kaart .onder { display: flex; justify-content: space-between; gap: 12px; font-size: .9rem; }
-.kaart .onder b { font-family: var(--kop); font-size: 1.15rem; display: block; }
+.kaart::before {
+  content: ""; position: absolute; inset: -20%; z-index: -1; opacity: .35; filter: blur(18px);
+  background:
+    radial-gradient(30% 22% at 30% 60%, rgba(255,255,255,.18), transparent 70%),
+    radial-gradient(25% 18% at 65% 35%, rgba(255,255,255,.12), transparent 70%),
+    radial-gradient(35% 25% at 80% 80%, rgba(0,0,0,.5), transparent 70%);
+}
+.kaart .ros { height: 32px; width: auto; margin-bottom: 4px; filter: drop-shadow(0 2px 6px rgba(0,0,0,.4)); }
+.kaart .kop { font-family: var(--kop); font-weight: 800; font-size: 1.9rem; letter-spacing: .05em; line-height: .9; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0,0,0,.35); }
+.kaart .saldo, .kaart .sier, .kaart .hoek { font-family: "Playfair Display", Georgia, "Times New Roman", serif; font-style: italic; font-weight: 500; }
+.kaart .saldo { font-size: clamp(2.4rem, 12vw, 3.4rem); line-height: 1.05; text-shadow: 0 3px 14px rgba(0,0,0,.35); }
+.kaart .sier { font-size: .95rem; opacity: .9; margin-top: 4px; }
+.kaart .hoek { position: absolute; top: 12px; right: 16px; font-size: .85rem; opacity: .9; }
+.kaart .onder { position: absolute; left: 18px; right: 18px; bottom: 12px; display: flex; justify-content: space-between; gap: 12px; font-size: .8rem; opacity: .92; }
+.kaart .onder span { text-align: left; }
+.kaart .onder .rechts { text-align: right; }
+.kaart .onder b { font-family: var(--kop); font-weight: 600; font-size: 1.05rem; display: block; letter-spacing: .02em; }
 
 /* Vlakken en lijsten */
 .vlak { background: var(--vlak); border-radius: 12px; padding: 16px; display: grid; gap: 12px; }
@@ -355,7 +370,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.17";
+const VERSIE = "2026-11-09.18";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -774,10 +789,11 @@ function toonInloggen(modus = "inloggen") {
   window.onhashchange = null;
   scherm().innerHTML = `
     <section class="welkom">
-      <div class="kaart">
-        <div class="naam">Vestekaart</div>
-        <div class="saldo">Zes man, één kaart</div>
-        <div class="onder"><span>Wie dronk wat, en wie betaalt wat.</span></div>
+      <div class="kaart" style="padding-bottom:14px">
+        <img class="ros" src="${ROS}" alt="">
+        <div class="kop">Vestekaart</div>
+        <div class="saldo" style="font-size:clamp(1.9rem, 9vw, 2.6rem)">Zes man, één kaart</div>
+        <div class="sier">– Sinds 2008 –</div>
       </div>
       <div class="seg" role="tablist">
         <button type="button" data-modus="inloggen" class="${modus === "inloggen" ? "aan" : ""}">Inloggen</button>
@@ -894,12 +910,16 @@ function bedragBij(wedId, deelnemerId) {
 }
 function hadNiets(wedId) { return S.niets.has(wedId); }
 
+const ROS = "data:image/png;base64,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";
 const seizoen = () => S.instellingen.seizoen ? `Seizoen ’${S.instellingen.seizoen}` : "";
 function kaartHtml() {
   const p = S.pot || {};
   return `<div class="kaart">
-      <div class="naam" style="display:flex;justify-content:space-between;gap:8px"><span>Op de Vestekaart</span><span style="opacity:.85">${seizoen()}</span></div>
-      <div class="saldo">${euro(p.saldo_kaart)}</div>
+      ${seizoen() ? `<div class="hoek">${seizoen()}</div>` : ""}
+      <img class="ros" src="${ROS}" alt="">
+      <div class="kop">Vestekaart</div>
+      <div class="saldo" aria-label="Saldo op de Vestekaart">${euro(p.saldo_kaart)}</div>
+      <div class="sier">– Sinds 2008 –</div>
       <div class="onder">
         <span>Op de rekening<b>${euro(p.saldo_rekening)}</b></span>
         <span class="rechts">Samen<b>${euro(p.saldo_totaal)}</b></span>
