@@ -3,11 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#C8102E">
+<meta name="theme-color" content="#5E0C16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vestekaart">
 <title>Vestekaart</title>
+<script>
+  // Licht of donker van dit apparaat meteen toepassen, zodat er niets verspringt
+  try { var t = localStorage.getItem("vestekaart-thema"); if (t === "licht" || t === "donker") document.documentElement.dataset.thema = t; } catch (e) {}
+</script>
 <link rel="icon" type="image/png" href="logo.png">
 <link rel="apple-touch-icon" href="logo.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -17,8 +21,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
 <style>
 :root {
-  --rood: #C8102E;
-  --rood-donker: #9E0B23;
+  --rood: #A51225;
+  --rood-donker: #7A0E1A;
+  --rood-diep: #3A0A10;
+  --rood-verloop: linear-gradient(100deg, #3A0A10 0%, #6E0D18 50%, #A51225 100%);
   --inkt: #23262E;
   --grijs: #6B7180;
   --lijn: #DDE0E6;
@@ -29,19 +35,43 @@
   --tekst-op-rood: #FFFFFF;
   --kop: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
   --romp: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --rood-tekst: #A51225;
   color-scheme: light;
 }
+/* Donker: automatisch volgens de telefoon, of zelf gekozen onder Profiel */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-thema="licht"]) {
     --inkt: #E9EBF0;
     --grijs: #9BA1AE;
     --lijn: #353944;
     --vlak: #22252D;
     --achter: #17191F;
     --groen: #3DBE85;
+    --rood: #B5162A;
+    --rood-tekst: #FF6B7D;
     color-scheme: dark;
   }
 }
+:root[data-thema="donker"] {
+    --inkt: #E9EBF0;
+    --grijs: #9BA1AE;
+    --lijn: #353944;
+    --vlak: #22252D;
+    --achter: #17191F;
+    --groen: #3DBE85;
+    --rood: #B5162A;
+    --rood-tekst: #FF6B7D;
+    color-scheme: dark;
+}
+.kleurkeuze { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kleurkeuze button {
+  border: 2px solid var(--lijn); background: var(--vlak); border-radius: 12px; padding: 0 0 10px;
+  overflow: hidden; cursor: pointer; display: grid; gap: 8px; font-weight: 600; color: var(--inkt);
+}
+.kleurkeuze button.aan { border-color: var(--rood); box-shadow: 0 0 0 1px var(--rood); }
+.kleurkeuze .staal { height: 46px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; border-bottom: 1px solid var(--lijn); }
+.kleurkeuze .staal span { width: 34px; height: 14px; border-radius: 7px; background: #A51225; }
+
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
@@ -66,7 +96,7 @@ h3 { font-size: 1.25rem; }
 
 /* Kop */
 header.balk {
-  background: var(--rood);
+  background: var(--rood-verloop);
   color: var(--tekst-op-rood);
   padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px;
   position: sticky; top: 0; z-index: 10;
@@ -142,8 +172,7 @@ ul.lijst .groei { flex: 1; min-width: 0; }
   display: inline-flex; align-items: center; justify-content: center;
   font-family: var(--kop); font-weight: 700; font-size: .95rem;
 }
-.open { color: var(--rood); }
-@media (prefers-color-scheme: dark) { .open { color: #FF6B7D; } }
+.open { color: var(--rood-tekst); }
 
 /* Wedstrijden als kaartjes met een scheurlijn */
 .ticket {
@@ -153,7 +182,7 @@ ul.lijst .groei { flex: 1; min-width: 0; }
 }
 .ticket .dag {
   text-align: center; font-family: var(--kop); line-height: 1; padding: 10px 0;
-  border-right: 2px dashed var(--lijn); height: 100%;
+  border-right: 2px dashed var(--rood); height: 100%;
   display: flex; flex-direction: column; justify-content: center;
 }
 .ticket .dag b { font-size: 1.6rem; display: block; }
@@ -189,10 +218,9 @@ ul.lijst .groei { flex: 1; min-width: 0; }
   padding: 10px 16px; font-weight: 600; cursor: pointer; min-height: 42px;
 }
 .knop:hover { background: var(--rood-donker); }
-.knop.licht { background: transparent; color: var(--rood); box-shadow: inset 0 0 0 2px var(--rood); }
+.knop.licht { background: transparent; color: var(--rood-tekst); box-shadow: inset 0 0 0 2px var(--rood-tekst); }
 .knop.klein { padding: 6px 12px; min-height: 34px; font-size: .9rem; }
 .knop[disabled] { opacity: .5; cursor: default; }
-@media (prefers-color-scheme: dark) { .knop.licht { color: #FF6B7D; box-shadow: inset 0 0 0 2px #FF6B7D; } }
 .veld { display: grid; gap: 4px; }
 .veld > span { font-size: .875rem; color: var(--grijs); }
 input, select, textarea {
@@ -288,8 +316,7 @@ input[type=file] { padding: 8px; }
 
 /* Home en invullen */
 .mijnopen { display: grid; gap: 6px; text-decoration: none; color: inherit; border-left: 6px solid var(--rood); }
-.mijnopen .groot { font-family: var(--kop); font-size: 2.4rem; font-weight: 700; line-height: 1; color: var(--rood); }
-@media (prefers-color-scheme: dark) { .mijnopen .groot { color: #FF6B7D; } }
+.mijnopen .groot { font-family: var(--kop); font-size: 2.4rem; font-weight: 700; line-height: 1; color: var(--rood-tekst); }
 .label.nieuw-w { background: var(--rood); color: #fff; }
 .item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--lijn); }
 .item:first-child { border-top: 0; }
@@ -334,8 +361,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 .chip-slot { display: inline-flex; gap: 6px; align-items: center; border-radius: 999px; padding: 3px 10px; font-size: .8rem; font-weight: 600;
   background: color-mix(in srgb, var(--groen) 16%, var(--vlak)); color: var(--groen); }
 .chip-slot.uit { background: color-mix(in srgb, var(--goud) 22%, var(--vlak)); color: var(--inkt); }
-.label.rol { background: color-mix(in srgb, var(--rood) 12%, var(--vlak)); color: var(--rood); }
-@media (prefers-color-scheme: dark) { .label.rol { color: #FF6B7D; } }
+.label.rol { background: color-mix(in srgb, var(--rood) 12%, var(--vlak)); color: var(--rood-tekst); }
 
 /* Melding */
 #toast {
@@ -370,7 +396,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.18";
+const VERSIE = "2026-11-09.21";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -575,6 +601,27 @@ async function toonMfaInstellen(verplicht) {
     location.hash = verplicht ? "home" : "profiel";
     naInloggen(session.user);
   };
+}
+
+// Weergave: automatisch, licht of donker, per apparaat bewaard
+function themaNu() { return document.documentElement.dataset.thema || "auto"; }
+function zetThema(t) {
+  if (t === "licht" || t === "donker") document.documentElement.dataset.thema = t;
+  else delete document.documentElement.dataset.thema;
+  try { localStorage.setItem("vestekaart-thema", t); } catch { /* niet erg */ }
+}
+function kleurBlok(el) {
+  const nu = themaNu();
+  const keuze = (k, label, staal) => `<button type="button" role="radio" aria-checked="${nu === k}" class="${nu === k ? "aan" : ""}" data-thema="${k}">
+      <span class="staal" style="background:${staal}"><span></span></span>${label}</button>`;
+  el.innerHTML = `<h3>Weergave</h3>
+    <div class="kleurkeuze" role="radiogroup" aria-label="Weergave">
+      ${keuze("licht", "Licht", "linear-gradient(#FFFFFF, #EEF0F3)")}
+      ${keuze("donker", "Donker", "linear-gradient(#22252D, #17191F)")}
+      ${keuze("auto", "Automatisch", "linear-gradient(90deg, #EEF0F3 50%, #17191F 50%)")}
+    </div>
+    <p class="klein muted">Automatisch volgt de instelling van je telefoon. Geldt voor dit apparaat.</p>`;
+  el.querySelectorAll("[data-thema]").forEach(b => (b.onclick = () => { zetThema(b.dataset.thema); kleurBlok(el); }));
 }
 
 async function mfaBlok(el) {
@@ -1251,6 +1298,7 @@ function toonProfiel() {
       </div>
       <p class="klein muted" id="fotoStatus" role="status"></p>
     </div>
+    <div class="vlak" id="kleurBlok"></div>
     <div class="vlak" id="meldBlok"><h3>Meldingen</h3><p class="muted klein">Laden…</p></div>
     <div class="vlak" id="mfaBlok"><h3>Tweestapsverificatie</h3><p class="muted klein">Laden…</p></div>
     <form class="vlak" id="pw">
@@ -1274,6 +1322,7 @@ function toonProfiel() {
   $("#uit").onclick = () => sb.auth.signOut();
   mfaBlok($("#mfaBlok"));
   meldingenBlok($("#meldBlok"));
+  kleurBlok($("#kleurBlok"));
   $("#foto").onchange = async e => {
     const bestand = e.target.files[0];
     if (!bestand) return;
