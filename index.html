@@ -507,7 +507,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-10.9";
+const VERSIE = "2026-11-10.10";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -1471,7 +1471,7 @@ function toonMijn() {
   }).filter(x => x.som > 0).reverse();
   const mijnBet = S.betalingen.filter(b => b.deelnemer_id === S.ik.id);
   const open = Number(s.openstaand);
-  const recent = b => Date.now() - new Date(b.created_at).getTime() < 7 * 24 * 3600 * 1000;
+  const recent = b => Date.now() - new Date(b.created_at).getTime() < 2 * 3600 * 1000;
 
   scherm().innerHTML = `
     <div class="vlak">
