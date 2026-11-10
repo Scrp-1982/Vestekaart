@@ -128,7 +128,14 @@
 }
 .shirtkeuze button.aan { border-color: var(--rood); box-shadow: 0 0 0 1px var(--rood); background: var(--vlak); }
 .shirtkeuze .shirt { width: 100%; max-width: 72px; height: auto; filter: drop-shadow(0 2px 3px rgba(0,0,0,.2)); }
+[hidden] { display: none !important; }
+#betaalBlok { scroll-margin-top: 80px; }
 .inklaplijst { display: grid; gap: 8px; }
+.betaal-bedrag { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.betaal-bedrag .getal { font-size: 2.2rem; line-height: 1; }
+.knop.tikkie { text-align: center; text-decoration: none; display: block; font-size: 1.05rem; padding: 14px 16px; }
+.betaal-klaar { display: grid; gap: 6px; border-top: 1px solid var(--lijn); padding-top: 12px; }
+details.rekening > summary { cursor: pointer; color: var(--grijs); }
 #fotoStatus:empty { display: none; }
 details.inklap { padding: 0; gap: 0; }
 details.inklap > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; cursor: pointer; }
@@ -497,7 +504,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-10.5";
+const VERSIE = "2026-11-10.6";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -1055,7 +1062,12 @@ function route() {
   S.vorigeHash = location.hash;
   if (pad === "wedstrijd" && arg) { markeerTab("wedstrijden"); return toonWedstrijd(arg); }
   if (pad === "wedstrijden") { markeerTab("wedstrijden"); return toonWedstrijden(); }
-  if (pad === "mijn") { markeerTab("mijn"); return toonMijn(); }
+  if (pad === "mijn") {
+    markeerTab("mijn");
+    toonMijn();
+    if (arg === "betalen") $("#betaalBlok")?.scrollIntoView({ block: "start" });
+    return;
+  }
   if (pad === "profiel") { markeerTab("profiel"); return toonProfiel(); }
   if (pad === "tweestap") { markeerTab("profiel"); return toonMfaInstellen(false); }
   if (pad === "inlezen" && arg && isBeheerder()) { markeerTab("wedstrijden"); return toonInlezen(arg); }
@@ -1130,11 +1142,16 @@ function toonHome() {
   scherm().innerHTML = `
     ${kaartHtml()}
     ${centen(open) > 0
-      ? `<a class="vlak mijnopen" href="#mijn">
+      ? `<a class="vlak mijnopen" href="#mijn/betalen">
           <span class="klein muted">Jij hebt nog open staan</span>
           <span class="groot">${euro(open)}</span>
-          <span class="klein">Maak het over naar de rekening en geef het door onder Mijn.</span></a>`
+          <span class="knop" style="justify-self:start;margin-top:6px">Betalen</span></a>`
       : `<div class="status goed">Je hebt niets open staan.</div>`}
+    ${isBeheerder() && (() => { const t = tikkie();
+        if (!t.link) return `<a class="status let" href="#beheer/betalingen" style="text-decoration:none;color:inherit">Er is nog geen Tikkie ingesteld. Tik hier om er een toe te voegen.</a>`;
+        if (!t.geldig) return `<a class="status let" href="#beheer/betalingen" style="text-decoration:none;color:inherit">Je Tikkie is verlopen. Tik hier om een nieuwe link te plakken.</a>`;
+        if (t.dagen !== null && t.dagen <= 3) return `<a class="status let" href="#beheer/betalingen" style="text-decoration:none;color:inherit">Je Tikkie verloopt ${t.dagen === 0 ? "vandaag" : `over ${t.dagen} ${t.dagen === 1 ? "dag" : "dagen"}`}. Tik hier om een nieuwe link te plakken.</a>`;
+        return ""; })()}
     ${teDoen.length
       ? `<div class="stapel"><h3>Geef aan wat je had</h3><div class="tickets">${teDoen.map(kaartje).join("")}</div></div>`
       : ""}`;
@@ -1351,6 +1368,64 @@ function toonWedstrijd(id) {
 // ---------------------------------------------------------------------
 // Mijn
 // ---------------------------------------------------------------------
+// ---------------------------------------------------------------------
+// Betalen met Tikkie (één link van de beheerder; iedereen vult zelf zijn bedrag in)
+// ---------------------------------------------------------------------
+function tikkie() {
+  const link = (S.instellingen.tikkie_link || "").trim();
+  const tot = S.instellingen.tikkie_tot || "";
+  const geldig = !!link && (!tot || tot >= vandaag());
+  const dagen = tot ? Math.round((dt(tot) - dt(vandaag())) / 86400000) : null;
+  return { link, tot, geldig, dagen };
+}
+async function kopieer(tekst, wat) {
+  try { await navigator.clipboard.writeText(tekst); toast(`${wat} gekopieerd`); return true; }
+  catch { toast(`Kopiëren lukte niet. ${wat}: ${tekst}`); return false; }
+}
+const bedragTekst = n => Number(n).toFixed(2).replace(".", ",");
+function betaalBlok(open) {
+  const t = tikkie();
+  const iban = (S.instellingen.iban || "").trim();
+  const naam = (S.instellingen.rekening_naam || "").trim();
+  const omschrijving = `Vestekaart ${S.ik.naam}`;
+  return `<div class="vlak betaal" id="betaalBlok">
+      <h3>Betalen</h3>
+      <div class="betaal-bedrag"><span class="getal">${euro(open)}</span>
+        <button type="button" class="knop klein licht" data-kopieer="${bedragTekst(open)}" data-wat="Bedrag">Kopieer bedrag</button></div>
+      ${t.geldig
+        ? `<a class="knop tikkie" id="tikkieKnop" href="${esc(t.link)}" target="_blank" rel="noopener">Betalen met Tikkie</a>
+           <p class="klein muted">Het bedrag wordt gekopieerd. Plak het in Tikkie, betaal met je bank, en kom daarna terug om je betaling door te geven.</p>`
+        : `<p class="klein muted">Betalen met Tikkie kan op dit moment niet${t.link ? ", de link is verlopen" : ""}. Maak het bedrag over naar de rekening hieronder.</p>`}
+      ${iban ? `<details class="rekening"><summary class="klein">Liever zelf overmaken?</summary>
+        <ul class="lijst klein">
+          <li><span class="groei">Rekening<br><b>${esc(iban)}</b>${naam ? `<br><span class="muted">${esc(naam)}</span>` : ""}</span>
+            <button type="button" class="knop klein licht" data-kopieer="${esc(iban.replace(/\s/g, ""))}" data-wat="Rekeningnummer">Kopieer</button></li>
+          <li><span class="groei">Omschrijving<br><b>${esc(omschrijving)}</b></span>
+            <button type="button" class="knop klein licht" data-kopieer="${esc(omschrijving)}" data-wat="Omschrijving">Kopieer</button></li>
+        </ul></details>` : ""}
+      <div class="betaal-klaar">
+        <button type="button" class="knop" id="betaaldKnop">Ik heb ${euro(open)} betaald</button>
+        <button type="button" class="tekstknop" id="anderBedrag">Ander bedrag doorgeven</button>
+      </div>
+    </div>`;
+}
+function koppelBetaalBlok(open) {
+  const blok = $("#betaalBlok");
+  if (!blok) return;
+  blok.querySelectorAll("[data-kopieer]").forEach(b => (b.onclick = () => kopieer(b.dataset.kopieer, b.dataset.wat)));
+  $("#tikkieKnop")?.addEventListener("click", () => {
+    try { navigator.clipboard.writeText(bedragTekst(open)); } catch { /* geen klembord */ }
+  });
+  $("#betaaldKnop").onclick = async () => {
+    if (!confirm(`Heb je ${euro(open)} overgemaakt? Dan wordt het direct op de rekening bijgeschreven.`)) return;
+    const { error } = await sb.from("betalingen").insert({ deelnemer_id: S.ik.id, bedrag: Math.round(open * 100) / 100, datum: vandaag() });
+    if (error) return fout(error, "Doorgeven");
+    toast("Dank je! Je betaling is bijgeschreven.");
+    verversEnToon();
+  };
+  $("#anderBedrag").onclick = () => { $("#meld").hidden = false; $("#meld input[name=bedrag]").focus(); };
+}
+
 function toonMijn() {
   titel(S.ik.naam);
   const s = S.saldo.find(x => x.id === S.ik.id) || {};
@@ -1372,8 +1447,9 @@ function toonMijn() {
         <span class="klein muted">Open<b class="getal ${Number(s.openstaand) > 0 ? "open" : ""}" style="${Number(s.openstaand) > 0 ? "" : "color:var(--inkt)"}">${euro(s.openstaand)}</b></span>
       </div>
     </div>
-    ${centen(open) > 0 ? `<form class="vlak" id="meld">
-      <h3>Betaling doorgeven</h3>
+    ${centen(open) > 0 ? betaalBlok(open) : ""}
+    ${centen(open) > 0 ? `<form class="vlak" id="meld" hidden>
+      <h3>Ander bedrag doorgeven</h3>
       <p class="klein muted">Heb je je bedrag overgemaakt naar de rekening? Geef het hier door, dan wordt het direct op de rekening bijgeschreven.</p>
       <div class="twee">
         <label class="veld"><span>Bedrag</span><input name="bedrag" inputmode="decimal" value="${open.toFixed(2).replace(".", ",")}" required></label>
@@ -1395,6 +1471,7 @@ function toonMijn() {
     </div>
     `;
 
+  koppelBetaalBlok(open);
   $("#meld")?.addEventListener("submit", async e => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -1671,7 +1748,26 @@ function admBetalingen(box) {
              laatst: eigen[0]?.created_at, open: Number(sd.openstaand) || 0 };
   }).filter(x => x.d.actief || x.aantal);
   const opties = S.deelnemers.filter(d => d.actief).map(d => `<option value="${d.id}">${esc(d.naam)}</option>`).join("");
+  const t = tikkie();
   box.innerHTML = `
+    <form class="vlak" id="tikkieForm">
+      <h3>Tikkie</h3>
+      <p class="klein muted">Maak in de Tikkie-app een betaalverzoek waarbij de betaler zelf het bedrag invult. Kies bij delen <b>Kopieer</b>, en plak de link hier.</p>
+      ${t.link ? `<div class="status ${t.geldig ? "goed" : "let"}">${t.geldig
+        ? `Ingesteld${t.tot ? `, geldig tot ${datumLang(t.tot)}` : ""}.`
+        : "Deze link is verlopen. Plak een nieuwe."}</div>` : ""}
+      <div class="rij" style="align-items:end">
+        <label class="veld" style="flex:3"><span>Tikkie-link</span><input name="link" type="url" inputmode="url" placeholder="https://tikkie.me/pay/…" value="${esc(t.link)}"></label>
+        <button type="button" class="knop licht" id="plakTikkie">Plakken</button>
+      </div>
+      <label class="veld"><span>Geldig tot (staat in Tikkie)</span><input name="tot" type="date" value="${esc(t.tot)}"></label>
+      <details class="rekening"><summary class="klein">Rekeningnummer voor wie zelf wil overmaken</summary>
+        <div class="stapel" style="margin-top:8px">
+          <label class="veld"><span>IBAN</span><input name="iban" autocomplete="off" placeholder="NL00 BANK 0123 4567 89" value="${esc(S.instellingen.iban || "")}"></label>
+          <label class="veld"><span>Ten name van</span><input name="naam" value="${esc(S.instellingen.rekening_naam || "")}"></label>
+        </div></details>
+      <button class="knop" style="justify-self:start">Opslaan</button>
+    </form>
     <div class="vlak"><h3>Per persoon, via de app</h3>
       <ul class="lijst">${perPersoon.map(x => `<li>
         ${avatar(x.d.id, 32)}
@@ -1701,6 +1797,27 @@ function admBetalingen(box) {
       </div>
       <button class="knop" style="justify-self:start">Invoeren</button>
     </form>`;
+  $("#plakTikkie").onclick = async () => {
+    try { $("#tikkieForm input[name=link]").value = (await navigator.clipboard.readText()).trim(); }
+    catch { toast("Plakken lukte niet. Houd het veld ingedrukt en kies Plak."); }
+  };
+  $("#tikkieForm").onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const link = String(f.get("link") || "").trim();
+    if (link && !/^https:\/\//.test(link)) return toast("Dat lijkt geen link. Hij begint met https://");
+    if (link && !/tikkie\.me/i.test(link) && !confirm("Dit lijkt geen Tikkie-link. Toch opslaan?")) return;
+    const rijen = [
+      { sleutel: "tikkie_link", waarde: link },
+      { sleutel: "tikkie_tot", waarde: String(f.get("tot") || "") },
+      { sleutel: "iban", waarde: String(f.get("iban") || "").trim().toUpperCase() },
+      { sleutel: "rekening_naam", waarde: String(f.get("naam") || "").trim() },
+    ];
+    const { error } = await sb.from("instellingen").upsert(rijen);
+    if (error) return fout(error, "Opslaan");
+    toast("Opgeslagen");
+    verversEnToon();
+  };
   box.querySelectorAll("[data-weg]").forEach(b => (b.onclick = async () => {
     if (!confirm("Deze betaling verwijderen?")) return;
     const { error } = await sb.from("betalingen").delete().eq("id", b.dataset.weg);
