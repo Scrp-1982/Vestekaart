@@ -130,6 +130,9 @@
 .shirtkeuze .shirt { width: 100%; max-width: 72px; height: auto; filter: drop-shadow(0 2px 3px rgba(0,0,0,.2)); }
 [hidden] { display: none !important; }
 #betaalBlok { scroll-margin-top: 80px; }
+.melding-weg { display: flex; align-items: flex-start; gap: 10px; }
+.melding-weg a { flex: 1; }
+.weg-knop { background: none; border: 0; font-size: 1.4rem; line-height: 1; padding: 0 2px; cursor: pointer; color: inherit; opacity: .7; }
 .inklaplijst { display: grid; gap: 8px; }
 .betaal-bedrag { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .betaal-bedrag .getal { font-size: 2.2rem; line-height: 1; }
@@ -504,7 +507,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-10.6";
+const VERSIE = "2026-11-10.7";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -1118,6 +1121,30 @@ function kaartHtml() {
     </div>`;
 }
 
+// Waarschuwing voor de beheerder over de Tikkie-link. Alleen nodig als iemand nog
+// iets open heeft staan, en weg te klikken tot er een andere link wordt opgeslagen.
+const tikkieSleutel = t => `${t.link}|${t.tot}`;
+function tikkieWaarschuwing() {
+  const t = tikkie();
+  const iemandOpen = S.saldo.some(x => x.actief && centen(x.openstaand) > 0);
+  if (!iemandOpen || S.instellingen.tikkie_melding_weg === tikkieSleutel(t)) return "";
+  let tekst = "";
+  if (!t.link) tekst = "Er is nog geen Tikkie ingesteld.";
+  else if (!t.geldig) tekst = "Je Tikkie is verlopen.";
+  else if (t.dagen !== null && t.dagen <= 3) tekst = `Je Tikkie verloopt ${t.dagen === 0 ? "vandaag" : `over ${t.dagen} ${t.dagen === 1 ? "dag" : "dagen"}`}.`;
+  if (!tekst) return "";
+  return `<div class="status let melding-weg">
+      <a href="#beheer/betalingen" style="text-decoration:none;color:inherit">${tekst} Tik hier om een nieuwe link te plakken.</a>
+      <button type="button" class="weg-knop" id="tikkieWeg" aria-label="Melding wegklikken">×</button>
+    </div>`;
+}
+async function tikkieWaarschuwingWeg() {
+  const { error } = await sb.from("instellingen").upsert({ sleutel: "tikkie_melding_weg", waarde: tikkieSleutel(tikkie()) });
+  if (error) return fout(error, "Wegklikken");
+  toast("Melding weggeklikt. Hij komt terug als je een nieuwe link opslaat.");
+  verversEnToon();
+}
+
 function toonHome() {
   titel("Vestekaart");
   const s = S.saldo.find(x => x.id === S.ik.id) || {};
@@ -1147,14 +1174,11 @@ function toonHome() {
           <span class="groot">${euro(open)}</span>
           <span class="knop" style="justify-self:start;margin-top:6px">Betalen</span></a>`
       : `<div class="status goed">Je hebt niets open staan.</div>`}
-    ${isBeheerder() && (() => { const t = tikkie();
-        if (!t.link) return `<a class="status let" href="#beheer/betalingen" style="text-decoration:none;color:inherit">Er is nog geen Tikkie ingesteld. Tik hier om er een toe te voegen.</a>`;
-        if (!t.geldig) return `<a class="status let" href="#beheer/betalingen" style="text-decoration:none;color:inherit">Je Tikkie is verlopen. Tik hier om een nieuwe link te plakken.</a>`;
-        if (t.dagen !== null && t.dagen <= 3) return `<a class="status let" href="#beheer/betalingen" style="text-decoration:none;color:inherit">Je Tikkie verloopt ${t.dagen === 0 ? "vandaag" : `over ${t.dagen} ${t.dagen === 1 ? "dag" : "dagen"}`}. Tik hier om een nieuwe link te plakken.</a>`;
-        return ""; })()}
+    ${isBeheerder() ? tikkieWaarschuwing() : ""}
     ${teDoen.length
       ? `<div class="stapel"><h3>Geef aan wat je had</h3><div class="tickets">${teDoen.map(kaartje).join("")}</div></div>`
       : ""}`;
+  $("#tikkieWeg")?.addEventListener("click", tikkieWaarschuwingWeg);
 }
 
 function toonPot() {
