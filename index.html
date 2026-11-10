@@ -128,6 +128,14 @@
 }
 .shirtkeuze button.aan { border-color: var(--rood); box-shadow: 0 0 0 1px var(--rood); background: var(--vlak); }
 .shirtkeuze .shirt { width: 100%; max-width: 72px; height: auto; filter: drop-shadow(0 2px 3px rgba(0,0,0,.2)); }
+.inklaplijst { display: grid; gap: 8px; }
+#fotoStatus:empty { display: none; }
+details.inklap { padding: 0; gap: 0; }
+details.inklap > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; cursor: pointer; }
+details.inklap > summary::-webkit-details-marker { display: none; }
+details.inklap > summary .pijl { width: 20px; height: 20px; color: var(--grijs); transition: transform .15s; flex: none; }
+details.inklap[open] > summary .pijl { transform: rotate(180deg); }
+details.inklap .inklap-binnen { padding: 0 16px 16px; }
 .zonder { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .zonder button { border: 2px solid var(--lijn); background: var(--vlak); color: var(--inkt); border-radius: 999px; padding: 4px 12px; font-weight: 600; cursor: pointer; }
 .zonder button.aan { border-color: var(--rood); color: var(--rood-tekst); }
@@ -484,7 +492,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-10.1";
+const VERSIE = "2026-11-10.2";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -729,7 +737,7 @@ function zetThema(t) {
 }
 function kleurBlok(el) {
   const nu = themaNu();
-  el.innerHTML = `<h3>Shirt</h3>
+  el.innerHTML = `
     <div class="shirtkeuze" role="radiogroup" aria-label="Kies een shirt">
       ${SHIRTS.map(([k, label]) => `<button type="button" role="radio" aria-checked="${nu === k}" class="${nu === k ? "aan" : ""}" data-thema="${k}">
         ${shirtSvg(k)}<span>${label}</span></button>`).join("")}
@@ -747,7 +755,7 @@ async function mfaBlok(el) {
   const { actief } = await mfaFactoren();
   const beheerder = isBeheerder();
   if (actief.length) {
-    el.innerHTML = `<h3>Tweestapsverificatie</h3>
+    el.innerHTML = `
       <div class="status goed">Staat aan. Bij het inloggen op een nieuw apparaat vraagt de app om een code uit je authenticator-app.</div>
       ${beheerder ? `<p class="klein muted">Voor de beheerder is dit verplicht en kan het niet uit.</p>`
         : `<button type="button" class="knop licht" id="mfaWeg" style="justify-self:start">Uitzetten</button>`}`;
@@ -761,7 +769,7 @@ async function mfaBlok(el) {
     });
     return;
   }
-  el.innerHTML = `<h3>Tweestapsverificatie</h3>
+  el.innerHTML = `
     <p class="klein muted">Extra beveiliging: bij het inloggen vul je naast je wachtwoord een code in uit een authenticator-app, zoals de app Wachtwoorden op je iPhone. Op een apparaat waar je al bent ingelogd, blijf je gewoon ingelogd.</p>
     <a class="knop" href="#tweestap" style="justify-self:start;text-decoration:none">Aanzetten</a>`;
 }
@@ -814,7 +822,7 @@ async function controleerAbonnement() {
 }
 
 async function meldingenBlok(el) {
-  const kop = `<h3>Meldingen</h3>`;
+  const kop = ``;
   if (!pushKan() || (isIOS() && !opBeginscherm())) {
     el.innerHTML = `${kop}<p class="klein muted">${isIOS()
       ? "Meldingen en het getal op het icoon werken alleen als je de Vestekaart opent via het icoon op je beginscherm. Zet de app eerst op je beginscherm (Safari, Delen, Zet op beginscherm) en open hem daarvandaan."
@@ -1403,6 +1411,16 @@ function toonMijn() {
 // ---------------------------------------------------------------------
 // Profiel
 // ---------------------------------------------------------------------
+// Uitklapbaar onderdeel; onthoudt welke open staan zolang de app open is
+S.profielOpen = new Set();
+function inklap(sleutel, titelTekst, inhoud) {
+  return `<details class="vlak inklap" data-inklap="${sleutel}" ${S.profielOpen.has(sleutel) ? "open" : ""}>
+    <summary><h3>${titelTekst}</h3>
+      <svg class="pijl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+    <div class="inklap-binnen">${inhoud}</div>
+  </details>`;
+}
+
 function toonProfiel() {
   titel("Profiel");
   scherm().innerHTML = `
@@ -1417,17 +1435,15 @@ function toonProfiel() {
       </div>
       <p class="klein muted" id="fotoStatus" role="status"></p>
     </div>
-    <div class="vlak" id="kleurBlok"></div>
-    <div class="vlak" id="meldBlok"><h3>Meldingen</h3><p class="muted klein">Laden…</p></div>
-    <div class="vlak" id="mfaBlok"><h3>Tweestapsverificatie</h3><p class="muted klein">Laden…</p></div>
-    <form class="vlak" id="pw">
-      <h3>Wachtwoord wijzigen</h3>
-      <label class="veld"><span>Nieuw wachtwoord (minstens 8 tekens)</span><input name="pw" type="password" minlength="8" autocomplete="new-password" required></label>
-      <button class="knop" style="justify-self:start">Wachtwoord wijzigen</button>
-    </form>
-    <div class="vlak">
-      <h3>Op je beginscherm</h3>
-      <p class="klein muted">Open deze site in Safari, tik op Delen en kies Zet op beginscherm. Dan opent de Vestekaart als een gewone app.</p>
+    <div class="inklaplijst">
+      ${inklap("shirt", "Shirt", `<div id="kleurBlok" class="stapel"></div>`)}
+      ${inklap("meldingen", "Meldingen", `<div id="meldBlok" class="stapel"><p class="muted klein">Laden…</p></div>`)}
+      ${inklap("tweestap", "Tweestapsverificatie", `<div id="mfaBlok" class="stapel"><p class="muted klein">Laden…</p></div>`)}
+      ${inklap("wachtwoord", "Wachtwoord wijzigen", `<form id="pw" class="stapel">
+        <label class="veld"><span>Nieuw wachtwoord (minstens 8 tekens)</span><input name="pw" type="password" minlength="8" autocomplete="new-password" required></label>
+        <button class="knop" style="justify-self:start">Wachtwoord wijzigen</button>
+      </form>`)}
+      ${inklap("beginscherm", "Op je beginscherm", `<p class="klein muted">Open deze site in Safari, tik op Delen en kies Zet op beginscherm. Dan opent de Vestekaart als een gewone app.</p>`)}
     </div>
     <div class="knoppen"><button type="button" class="knop licht" id="uit">Uitloggen</button></div>
     <p class="klein muted">Versie ${VERSIE}</p>`;
@@ -1439,6 +1455,9 @@ function toonProfiel() {
     toast("Wachtwoord gewijzigd");
   };
   $("#uit").onclick = () => sb.auth.signOut();
+  scherm().querySelectorAll("details[data-inklap]").forEach(d => d.addEventListener("toggle", () => {
+    if (d.open) S.profielOpen.add(d.dataset.inklap); else S.profielOpen.delete(d.dataset.inklap);
+  }));
   mfaBlok($("#mfaBlok"));
   meldingenBlok($("#meldBlok"));
   kleurBlok($("#kleurBlok"));
