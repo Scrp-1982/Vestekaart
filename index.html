@@ -302,8 +302,24 @@ pre.verslag { white-space: pre-wrap; font-size: .85rem; margin: 0; background: v
   padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px;
 }
 .kijker-balk button { background: rgba(255,255,255,.14); color: #fff; border: 0; border-radius: 10px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
-.kijker-beeld { flex: 1; overflow: auto; padding: 0 8px calc(env(safe-area-inset-bottom, 0px) + 8px); text-align: center; }
-.kijker-beeld img { max-width: 100%; height: auto; }
+.kijker-beeld {
+  flex: 1; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.kijker-beeld::-webkit-scrollbar { display: none; }
+.kijker .dia {
+  flex: 0 0 100%; scroll-snap-align: center; scroll-snap-stop: always; overflow-y: auto;
+  padding: 0 8px calc(env(safe-area-inset-bottom, 0px) + 8px); text-align: center;
+}
+.kijker .dia img { max-width: 100%; height: auto; }
+#kijkerTeller { font-weight: 600; opacity: .85; }
+.kijker-pijl {
+  position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 50%;
+  border: 0; background: rgba(255,255,255,.16); color: #fff; font-size: 1.8rem; line-height: 1; cursor: pointer;
+}
+.kijker-pijl.links { left: 8px; } .kijker-pijl.rechts { right: 8px; }
+.kijker-pijl[hidden] { display: none; }
+@media (hover: none) { .kijker-pijl { display: none; } }
 .voorstel { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: start; padding: 12px 0; border-top: 1px solid var(--lijn); }
 .voorstel:first-of-type { border-top: 0; }
 .voorstel input[type=checkbox] { width: 22px; height: 22px; min-height: 0; margin-top: 2px; }
@@ -385,8 +401,10 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 </header>
 <div class="menu" id="menu" hidden><div class="menu-paneel" role="dialog" aria-modal="true" aria-label="Menu" id="menuPaneel"></div></div>
 <div class="kijker" id="kijker" hidden role="dialog" aria-modal="true" aria-label="Screenshot">
-  <div class="kijker-balk"><button id="kijkerDicht">Sluiten</button><button id="kijkerWeg" hidden>Verwijderen</button></div>
-  <div class="kijker-beeld"><img id="kijkerImg" alt="Screenshot van de Vestekaart"></div>
+  <div class="kijker-balk"><button id="kijkerDicht">Sluiten</button><span id="kijkerTeller" aria-live="polite"></span><button id="kijkerWeg" hidden>Verwijderen</button></div>
+  <div class="kijker-beeld" id="kijkerRol"></div>
+  <button class="kijker-pijl links" id="kijkerVorige" aria-label="Vorige screenshot">‹</button>
+  <button class="kijker-pijl rechts" id="kijkerVolgende" aria-label="Volgende screenshot">›</button>
 </div>
 <main id="scherm"><p class="muted">Laden…</p></main>
 <nav class="tabs" id="tabs" hidden></nav>
@@ -396,7 +414,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-09.21";
+const VERSIE = "2026-11-09.22";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -1768,9 +1786,35 @@ Bijgewerkt: ${esc(regels(verslag.bijgewerkt))}${verslag.niet_meer_op_site?.lengt
 function galerijHtml(wedId) {
   const shots = S.screenshots.filter(x => x.wedstrijd_id === wedId);
   if (!shots.length) return "";
+  const ongesneden = shots.filter(x => !/-k\.jpg$/.test(x.pad)).length;
   return `<div class="vlak"><h3>Screenshots van de kaart</h3>
     <div class="galerij">${shots.map(x => `<button class="duim" data-kijk="${esc(x.id)}" aria-label="Screenshot groot bekijken">
-      <img data-pad="${esc(x.pad)}" alt=""></button>`).join("")}</div></div>`;
+      <img data-pad="${esc(x.pad)}" alt=""></button>`).join("")}</div>
+    ${isBeheerder() && ongesneden ? `<button type="button" class="tekstknop" id="snijBestaand" data-wed="${wedId}">Tijd en batterij wegsnijden bij ${ongesneden === 1 ? "deze screenshot" : `deze ${ongesneden} screenshots`}</button>` : ""}</div>`;
+}
+async function snijBestaande(wedId, knop) {
+  const shots = S.screenshots.filter(x => x.wedstrijd_id === wedId && !/-k\.jpg$/.test(x.pad));
+  knop.disabled = true;
+  try {
+    for (let i = 0; i < shots.length; i++) {
+      knop.textContent = `Bezig: ${i + 1} van ${shots.length}…`;
+      const x = shots[i];
+      const { data: oud, error: e1 } = await sb.storage.from("screenshots").download(x.pad);
+      if (e1) throw e1;
+      const { blob, w, h } = await verklein(oud, true);
+      const nieuw = x.pad.replace(/\.jpg$/, "") + "-k.jpg";
+      const { error: e2 } = await sb.storage.from("screenshots").upload(nieuw, blob, { contentType: "image/jpeg", upsert: true });
+      if (e2) throw e2;
+      const { error: e3 } = await sb.from("screenshots").update({ pad: nieuw, breedte: w, hoogte: h }).eq("id", x.id);
+      if (e3) throw e3;
+      await sb.storage.from("screenshots").remove([x.pad]);
+    }
+    toast("Bijgesneden");
+    verversEnToon();
+  } catch (err) {
+    knop.disabled = false;
+    fout(err, "Bijsnijden");
+  }
 }
 function urlVan(map, pad) {
   const u = S.urls[`${map}:${pad}`];
@@ -1790,43 +1834,80 @@ async function vulPlaatjes(box) {
   await urlsVoor([...new Set(imgs.map(i => i.dataset.pad))]);
   imgs.forEach(i => { const u = urlVan("screenshots", i.dataset.pad); if (u) i.src = u; });
   box.querySelectorAll("[data-kijk]").forEach(b => (b.onclick = () => openKijker(b.dataset.kijk)));
+  const snij = box.querySelector("#snijBestaand");
+  if (snij) snij.onclick = () => snijBestaande(snij.dataset.wed, snij);
+}
+// Groot bekijken; vegen naar de vorige of volgende screenshot van dezelfde wedstrijd
+let kijkerLijst = [];
+const kijkerIndex = () => { const r = $("#kijkerRol"); return r.clientWidth ? Math.round(r.scrollLeft / r.clientWidth) : 0; };
+function kijkerBijwerken() {
+  const i = kijkerIndex();
+  $("#kijkerTeller").textContent = kijkerLijst.length > 1 ? `${i + 1} / ${kijkerLijst.length}` : "";
+  $("#kijkerVorige").hidden = i <= 0;
+  $("#kijkerVolgende").hidden = i >= kijkerLijst.length - 1;
+}
+function kijkerNaar(i) {
+  const r = $("#kijkerRol");
+  r.scrollTo({ left: Math.max(0, Math.min(kijkerLijst.length - 1, i)) * r.clientWidth, behavior: "smooth" });
 }
 async function openKijker(id) {
   const x = S.screenshots.find(s => s.id === id);
   if (!x) return;
-  await urlsVoor([x.pad]);
-  $("#kijkerImg").src = urlVan("screenshots", x.pad) || "";
+  kijkerLijst = S.screenshots.filter(s => s.wedstrijd_id === x.wedstrijd_id);
+  await urlsVoor(kijkerLijst.map(s => s.pad));
+  const rol = $("#kijkerRol");
+  rol.innerHTML = kijkerLijst.map((s, i) => `<div class="dia"><img src="${esc(urlVan("screenshots", s.pad) || "")}" alt="Screenshot ${i + 1} van ${kijkerLijst.length}"></div>`).join("");
   $("#kijker").hidden = false;
+  rol.scrollLeft = kijkerLijst.findIndex(s => s.id === id) * rol.clientWidth;
+  kijkerBijwerken();
   $("#kijkerDicht").focus();
   const weg = $("#kijkerWeg");
   weg.hidden = !isBeheerder();
   weg.onclick = async () => {
-    if (!confirm("Deze screenshot verwijderen? De aankopen die eruit zijn gelezen, blijven staan.")) return;
-    const { error: e1 } = await sb.storage.from("screenshots").remove([x.pad]);
+    const huidig = kijkerLijst[kijkerIndex()];
+    if (!huidig || !confirm("Deze screenshot verwijderen? De aankopen die eruit zijn gelezen, blijven staan.")) return;
+    const { error: e1 } = await sb.storage.from("screenshots").remove([huidig.pad]);
     if (e1) return fout(e1, "Verwijderen");
-    const { error: e2 } = await sb.from("screenshots").delete().eq("id", x.id);
+    const { error: e2 } = await sb.from("screenshots").delete().eq("id", huidig.id);
     if (e2) return fout(e2, "Verwijderen");
     sluitKijker();
     toast("Screenshot verwijderd");
     verversEnToon();
   };
 }
-function sluitKijker() { $("#kijker").hidden = true; $("#kijkerImg").src = ""; }
+function sluitKijker() { $("#kijker").hidden = true; $("#kijkerRol").innerHTML = ""; kijkerLijst = []; }
 $("#kijkerDicht").onclick = sluitKijker;
+$("#kijkerVorige").onclick = () => kijkerNaar(kijkerIndex() - 1);
+$("#kijkerVolgende").onclick = () => kijkerNaar(kijkerIndex() + 1);
+$("#kijkerRol").addEventListener("scroll", () => requestAnimationFrame(kijkerBijwerken), { passive: true });
+document.addEventListener("keydown", e => {
+  if ($("#kijker").hidden) return;
+  if (e.key === "ArrowLeft") kijkerNaar(kijkerIndex() - 1);
+  if (e.key === "ArrowRight") kijkerNaar(kijkerIndex() + 1);
+});
 
 // ---------------------------------------------------------------------
 // Screenshots inlezen met AI
 // ---------------------------------------------------------------------
-async function verklein(bestand) {
+// Hoogte van de statusbalk (tijd, bereik, batterij) bovenaan een telefoonscreenshot
+function statusbalk(w, h) {
+  const r = h / w;
+  if (r >= 2.1 && r <= 2.3) return Math.round(w * 0.145);    // iPhone met notch of Dynamic Island
+  if (r >= 1.76 && r <= 1.79) return Math.round(w * 0.055);  // oudere iPhone met thuisknop (16:9)
+  return 0;                                                   // al bijgesneden of geen telefoonscreenshot
+}
+async function verklein(bestand, snijden = true) {
   const bron = await createImageBitmap(bestand);
+  const top = snijden ? statusbalk(bron.width, bron.height) : 0;
+  const bh = bron.height - top;
   const max = 2000;
-  const f = Math.min(1, max / Math.max(bron.width, bron.height));
-  const w = Math.round(bron.width * f), h = Math.round(bron.height * f);
+  const f = Math.min(1, max / Math.max(bron.width, bh));
+  const w = Math.round(bron.width * f), h = Math.round(bh * f);
   const c = document.createElement("canvas");
   c.width = w; c.height = h;
-  c.getContext("2d").drawImage(bron, 0, 0, w, h);
+  c.getContext("2d").drawImage(bron, 0, top, bron.width, bh, 0, 0, w, h);
   const blob = await new Promise(ok => c.toBlob(ok, "image/jpeg", 0.85));
-  return { blob, w, h };
+  return { blob, w, h, gesneden: top > 0 };
 }
 
 async function roepFunctie(naam, body) {
@@ -1850,29 +1931,37 @@ function toonInlezen(wedId) {
       <p class="klein muted">Maak in de app van FC Twente screenshots van de Transactie Geschiedenis. Tik ook een aankoop aan en maak een screenshot van het venster met de artikelen. Je mag tot 10 screenshots tegelijk kiezen.</p>
       <h3>${esc(wedstrijd.tegenstander)}, ${datumKort(wedstrijd.datum)}</h3>
       <label class="veld"><span>Screenshots</span><input type="file" id="inBest" accept="image/*" multiple></label>
+      <label class="knoppen klein" style="flex-wrap:nowrap"><input type="checkbox" id="inSnijden" checked style="width:20px;height:20px;min-height:0;accent-color:var(--rood)"> Tijd en batterij bovenaan wegsnijden</label>
       <div class="galerij" id="inDuim"></div>
       <button class="knop" id="inLees" disabled>Uploaden en uitlezen</button>
       <p class="klein muted" id="inStatus" role="status"></p>
     </div>
     <div id="inUitkomst" class="stapel"></div>`;
 
-  let bestanden = [];
+  let bestanden = [], klaar = [];
+  const voorbereiden = async () => {
+    $("#inLees").disabled = true;
+    klaar = [];
+    for (const f of bestanden) klaar.push(await verklein(f, $("#inSnijden").checked));
+    $("#inDuim").innerHTML = klaar.map(k => `<div class="duim"><img src="${URL.createObjectURL(k.blob)}" alt=""></div>`).join("");
+    $("#inLees").disabled = !klaar.length;
+  };
   $("#inBest").onchange = e => {
     bestanden = [...e.target.files].slice(0, 10);
     if (e.target.files.length > 10) toast("Alleen de eerste 10 screenshots worden gebruikt.");
-    $("#inDuim").innerHTML = bestanden.map(f => `<div class="duim"><img src="${URL.createObjectURL(f)}" alt=""></div>`).join("");
-    $("#inLees").disabled = !bestanden.length;
+    voorbereiden();
   };
+  $("#inSnijden").onchange = () => { if (bestanden.length) voorbereiden(); };
   $("#inLees").onclick = async () => {
     const knop = $("#inLees"), status = $("#inStatus");
     const wed = wedId;
     knop.disabled = true;
     try {
       const paden = [], rijen = [];
-      for (let i = 0; i < bestanden.length; i++) {
-        status.textContent = `Screenshot ${i + 1} van ${bestanden.length} uploaden…`;
-        const { blob, w, h } = await verklein(bestanden[i]);
-        const pad = `${wed}/${crypto.randomUUID()}.jpg`;
+      for (let i = 0; i < klaar.length; i++) {
+        status.textContent = `Screenshot ${i + 1} van ${klaar.length} uploaden…`;
+        const { blob, w, h, gesneden } = klaar[i];
+        const pad = `${wed}/${crypto.randomUUID()}${gesneden ? "-k" : ""}.jpg`;
         const { error } = await sb.storage.from("screenshots").upload(pad, blob, { contentType: "image/jpeg" });
         if (error) throw error;
         paden.push(pad);
