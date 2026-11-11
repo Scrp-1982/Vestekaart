@@ -160,11 +160,13 @@ details.inklap .inklap-binnen { padding: 0 16px 16px; }
 * { box-sizing: border-box; }
 main > .stapel > h3, main > h3, main > .stapel > .klein { color: var(--tekst-achter); }
 html, body { margin: 0; }
-/* De pagina vult altijd het hele scherm, ook als er weinig op staat (zoals op Home).
-   Anders zet de iPhone de onderbalk te hoog en herhaalt hij de achtergrond. */
-html { height: 100%; background-color: var(--achter); }
+/* Elke pagina is minstens één pixel hoger dan het scherm, ook als er weinig op staat
+   (zoals op Home). Op de andere pagina's zet de iPhone de onderbalk goed neer omdat ze
+   langer zijn dan het scherm; zo gedraagt Home zich precies hetzelfde. */
+html { background-color: var(--achter); }
 body {
-  min-height: max(100%, var(--schermhoogte, 0px));
+  min-height: calc(100vh + 1px);
+  min-height: calc(100lvh + 1px);
   font-family: var(--romp);
   font-size: 16px;
   line-height: 1.45;
@@ -509,7 +511,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-11.1";
+const VERSIE = "2026-11-11.2";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -2547,12 +2549,6 @@ async function slaVoorstelOp() {
     fout(err, "Opslaan");
   }
 }
-
-// Schermhoogte bijhouden: de iPhone geeft bij het opstarten soms eerst een te kleine hoogte door
-function meetScherm() { document.documentElement.style.setProperty("--schermhoogte", `${window.innerHeight}px`); }
-["resize", "orientationchange", "pageshow"].forEach(ev => window.addEventListener(ev, meetScherm));
-meetScherm();
-[100, 400, 1000].forEach(ms => setTimeout(meetScherm, ms));
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => { /* geen meldingen mogelijk */ });
