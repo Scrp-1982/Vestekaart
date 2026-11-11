@@ -162,10 +162,9 @@ main > .stapel > h3, main > h3, main > .stapel > .klein { color: var(--tekst-ach
 html, body { margin: 0; }
 /* De pagina vult altijd het hele scherm, ook als er weinig op staat (zoals op Home).
    Anders zet de iPhone de onderbalk te hoog en herhaalt hij de achtergrond. */
-html { min-height: 100%; background-color: var(--achter); }
+html { height: 100%; background-color: var(--achter); }
 body {
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: max(100%, var(--schermhoogte, 0px));
   font-family: var(--romp);
   font-size: 16px;
   line-height: 1.45;
@@ -356,6 +355,8 @@ pre.verslag { white-space: pre-wrap; font-size: .85rem; margin: 0; background: v
 }
 .menuknop svg { width: 26px; height: 26px; }
 .menuknop[hidden] { display: none; }
+.kop-avatar { display: inline-flex; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
+.kop-avatar .avatar, .kop-avatar .letters { display: inline-flex; }
 .menu { position: fixed; inset: 0; z-index: 30; background: rgba(20, 22, 28, .45); }
 .menu[hidden] { display: none; }
 .menu-paneel {
@@ -491,6 +492,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
   </button>
   <button class="terug" id="terug" hidden aria-label="Terug">‹</button>
   <h1 id="titel">Vestekaart</h1>
+  <a id="kopAvatar" class="kop-avatar" href="#profiel" hidden aria-label="Naar je profiel"></a>
 </header>
 <div class="menu" id="menu" hidden><div class="menu-paneel" role="dialog" aria-modal="true" aria-label="Menu" id="menuPaneel"></div></div>
 <div class="kijker" id="kijker" hidden role="dialog" aria-modal="true" aria-label="Screenshot">
@@ -507,7 +509,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-10.10";
+const VERSIE = "2026-11-11.1";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -613,6 +615,7 @@ async function laad() {
   }
   if (!S.alsId || !deelnemer(S.alsId)) S.alsId = S.ik?.id || null;
   zetIcoonGetal();
+  if (S.ik && !$("#menuknop").hidden) { $("#kopAvatar").innerHTML = avatar(S.ik.id, 34); $("#kopAvatar").hidden = false; }
   S.metMfa = new Set();
   S.laatst = {};
   if (S.ik?.is_beheerder) {
@@ -638,6 +641,7 @@ async function laad() {
 function verbergNavigatie() {
   $("#tabs").hidden = true;
   $("#menuknop").hidden = true;
+  $("#kopAvatar").hidden = true;
   window.onhashchange = null;
 }
 
@@ -935,7 +939,7 @@ async function verversEnToon() {
 // ---------------------------------------------------------------------
 async function start() {
   sb.auth.onAuthStateChange(ev => {
-    if (ev === "SIGNED_OUT") { S.user = null; S.ik = null; $("#menuknop").hidden = true; sluitMenu(); toonInloggen(); }
+    if (ev === "SIGNED_OUT") { S.user = null; S.ik = null; $("#menuknop").hidden = true; $("#kopAvatar").hidden = true; sluitMenu(); toonInloggen(); }
   });
   const { data: { session } } = await sb.auth.getSession();
   if (session) await naInloggen(session.user);
@@ -968,6 +972,8 @@ async function naInloggen(user) {
   }
   bouwTabs();
   $("#menuknop").hidden = false;
+  $("#kopAvatar").innerHTML = avatar(S.ik.id, 34);
+  $("#kopAvatar").hidden = false;
   controleerAbonnement();
   window.onhashchange = route;
   route();
@@ -2541,6 +2547,12 @@ async function slaVoorstelOp() {
     fout(err, "Opslaan");
   }
 }
+
+// Schermhoogte bijhouden: de iPhone geeft bij het opstarten soms eerst een te kleine hoogte door
+function meetScherm() { document.documentElement.style.setProperty("--schermhoogte", `${window.innerHeight}px`); }
+["resize", "orientationchange", "pageshow"].forEach(ev => window.addEventListener(ev, meetScherm));
+meetScherm();
+[100, 400, 1000].forEach(ms => setTimeout(meetScherm, ms));
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => { /* geen meldingen mogelijk */ });
