@@ -134,6 +134,22 @@
 .melding-weg a { flex: 1; }
 .weg-knop { background: none; border: 0; font-size: 1.4rem; line-height: 1; padding: 0 2px; cursor: pointer; color: inherit; opacity: .7; }
 .inklaplijst { display: grid; gap: 8px; }
+.gesloten-kop { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.label.slot { background: color-mix(in srgb, var(--groen) 18%, var(--vlak)); color: var(--groen); white-space: nowrap; margin-top: 4px; }
+details.persoonbon { border: 1px solid var(--lijn); border-radius: 12px; overflow: hidden; }
+details.persoonbon > summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; }
+details.persoonbon > summary::-webkit-details-marker { display: none; }
+details.persoonbon > summary .groei { flex: 1; min-width: 0; }
+details.persoonbon > summary .pijl { width: 18px; height: 18px; color: var(--grijs); transition: transform .15s; flex: none; }
+details.persoonbon[open] > summary .pijl { transform: rotate(180deg); }
+details.persoonbon .bonpapier { margin: 0 12px 12px; }
+.bonpapier {
+  background: var(--achter); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px;
+  border-top: 2px dashed var(--lijn); border-bottom: 2px dashed var(--lijn);
+}
+.bonregel { display: flex; justify-content: space-between; gap: 12px; }
+.bonregel.bontotaal { border-top: 1px solid var(--inkt); padding-top: 6px; margin-top: 2px; font-weight: 700; }
+.ticket .slotje { font-size: .8rem; }
 .betaal-bedrag { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .betaal-bedrag .getal { font-size: 2.2rem; line-height: 1; }
 .knop.tikkie { text-align: center; text-decoration: none; display: block; font-size: 1.05rem; padding: 14px 16px; }
@@ -511,7 +527,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-11.3";
+const VERSIE = "2026-11-11.4";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -1257,9 +1273,87 @@ function chip(c, magWeg) {
     magWeg ? `<button data-weg="${c.id}" aria-label="Claim van ${esc(d?.naam)} weghalen">×</button>` : ""}</span>`;
 }
 
+// ---------------------------------------------------------------------
+// Gesloten wedstrijd: alleen nog bekijken, als kassabonnen per persoon
+// ---------------------------------------------------------------------
+function bonHtml(regels, totaal, totaalLabel = "Totaal") {
+  return `<div class="bonpapier">
+    ${regels.map(r => `<div class="bonregel"><span>${r.aantal > 1 ? `<span class="muted">${r.aantal}×</span> ` : ""}${esc(r.naam)}${r.aantal > 1 ? ` <span class="klein muted">à ${euro(r.prijs)}</span>` : ""}</span><span class="getal">${euro(r.prijs * r.aantal)}</span></div>`).join("")}
+    <div class="bonregel bontotaal"><span>${totaalLabel}</span><span class="getal">${euro(totaal)}</span></div>
+  </div>`;
+}
+const pijlSvg = `<svg class="pijl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
+function groepeer(lijst) {
+  const uit = [];
+  for (const r of lijst) {
+    const k = `${r.naam.toLowerCase()}|${centen(r.prijs)}`;
+    const g = uit.find(x => x.k === k);
+    if (g) g.aantal++; else uit.push({ k, naam: r.naam, prijs: r.prijs, aantal: 1 });
+  }
+  return uit;
+}
+function toonGeslotenWedstrijd(w) {
+  titel(w.tegenstander, "wedstrijden");
+  const aankopen = S.transacties.filter(t => t.wedstrijd_id === w.id && t.soort === "aankoop");
+  const tids = new Set(aankopen.map(t => t.id));
+  const regels = S.regels.filter(r => tids.has(r.transactie_id));
+  const claims = S.claims.filter(c => tids.has(c.transactie_id));
+  const regelVan = new Map(regels.map(r => [r.id, r]));
+  const shots = S.screenshots.filter(x => x.wedstrijd_id === w.id);
+
+  const personen = S.deelnemers.map(d => {
+    const eigen = claims.filter(c => c.deelnemer_id === d.id);
+    const art = groepeer(eigen.filter(c => c.regel_id && regelVan.get(c.regel_id))
+      .map(c => ({ naam: regelVan.get(c.regel_id).omschrijving.trim(), prijs: Number(c.bedrag) })));
+    const vrij = eigen.filter(c => !c.regel_id).reduce((a, c) => a + Number(c.bedrag), 0);
+    if (vrij > 0) art.push({ naam: "Zonder artikellijst", prijs: vrij, aantal: 1 });
+    return { d, art, totaal: eigen.reduce((a, c) => a + Number(c.bedrag), 0) };
+  }).filter(x => x.totaal > 0).sort((a, b) => b.totaal - a.totaal);
+  const aantalArt = regels.length;
+
+  scherm().innerHTML = `
+    <div class="vlak">
+      <div class="gesloten-kop"><h2>FC Twente – ${esc(w.tegenstander)}</h2><span class="label slot">🔒 Gesloten</span></div>
+      <span class="muted">${datumLang(w.datum)}${w.aanvang ? `, ${tijd(w.aanvang)}` : ""}</span>
+      <div class="drie">
+        <span class="klein muted">Kosten<b class="getal" style="color:var(--inkt)">${euro(w.kosten)}</b></span>
+        <span class="klein muted">Personen<b class="getal" style="color:var(--inkt)">${personen.length}</b></span>
+        <span class="klein muted">Artikelen<b class="getal" style="color:var(--inkt)">${aantalArt || "–"}</b></span>
+      </div>
+      <div class="status goed">Alles is verdeeld en betaald. Deze wedstrijd is gesloten.</div>
+    </div>
+
+    <details class="vlak inklap" open>
+      <summary><h3>Wie had wat</h3>${pijlSvg}</summary>
+      <div class="inklap-binnen stapel">
+        ${personen.map(x => `<details class="persoonbon" ${x.d.id === S.ik.id ? "open" : ""}>
+          <summary>${avatar(x.d.id, 32)}<span class="groei"><b>${esc(x.d.naam)}</b>${x.d.id === S.ik.id ? ` <span class="klein muted">(jij)</span>` : ""}</span>
+            <span class="getal">${euro(x.totaal)}</span>${pijlSvg}</summary>
+          ${bonHtml(x.art, x.totaal, "Totaal")}
+        </details>`).join("")}
+      </div>
+    </details>
+
+    ${shots.length ? `<details class="vlak inklap">
+      <summary><h3>Screenshots van de kaart <span class="teller">${shots.length}</span></h3>${pijlSvg}</summary>
+      <div class="inklap-binnen"><div class="galerij">${shots.map(x => `<button class="duim" data-kijk="${esc(x.id)}" aria-label="Screenshot groot bekijken"><img data-pad="${esc(x.pad)}" alt=""></button>`).join("")}</div></div>
+    </details>` : ""}
+
+    ${isBeheerder() ? `<button type="button" class="tekstknop" id="heropenen" style="justify-self:center">Wedstrijd heropenen</button>` : ""}`;
+  vulPlaatjes(scherm());
+  $("#heropenen")?.addEventListener("click", async () => {
+    if (!confirm("Deze wedstrijd heropenen? Dan kan iedereen weer aanpassen wat hij had. Hij sluit pas weer vanzelf als jij dat aanzet.")) return;
+    const { error } = await sb.rpc("wedstrijd_heropenen", { p_wedstrijd: w.id });
+    if (error) return fout(error, "Heropenen");
+    toast("Wedstrijd heropend");
+    verversEnToon();
+  });
+}
+
 function toonWedstrijd(id) {
   const w = S.wedstrijden.find(x => x.id === id);
   if (!w) { location.hash = "wedstrijden"; return; }
+  if (w.gesloten_op) return toonGeslotenWedstrijd(w);
   titel(w.tegenstander, "home");
   const als = deelnemer(S.alsId) || S.ik;
   const ikZelf = als.id === S.ik.id;
@@ -1359,7 +1453,10 @@ function toonWedstrijd(id) {
           <span class="klein muted">${t.tijd ? tijd(t.tijd) + ", " : ""}${S.regels.filter(r => r.transactie_id === t.id).length} artikelen</span></span>
           <span class="getal">${euro(t.bedrag)}</span>
           <button class="knop klein licht" data-wegt="${t.id}" aria-label="Aankoop verwijderen">×</button></li>`).join("")}</ul></details>` : ""}
-      ${w.datum <= vandaag() ? `<div class="knoppen"><a class="knop" href="#inlezen/${id}" style="text-decoration:none">Screenshots inlezen</a></div>` : ""}` : ""}`;
+      ${w.datum <= vandaag() ? `<div class="knoppen"><a class="knop" href="#inlezen/${id}" style="text-decoration:none">Screenshots inlezen</a></div>` : ""}
+      ${w.handmatig_open ? `<div class="vlak"><h3>Heropend</h3>
+        <p class="klein muted">Je hebt deze wedstrijd heropend. Hij sluit niet vanzelf, tot je dat weer aanzet. Dan sluit hij zodra alles verdeeld en betaald is.</p>
+        <button type="button" class="knop licht" id="weerAutomatisch" style="justify-self:start">Weer automatisch laten sluiten</button></div>` : ""}` : ""}`;
   vulPlaatjes(scherm());
 
   const sc = scherm();
@@ -1374,6 +1471,12 @@ function toonWedstrijd(id) {
     verversEnToon();
   };
   $("#als")?.addEventListener("change", e => { S.alsId = e.target.value; toonWedstrijd(id); });
+  $("#weerAutomatisch")?.addEventListener("click", async () => {
+    const { error } = await sb.rpc("wedstrijd_automatisch", { p_wedstrijd: id });
+    if (error) return fout(error, "Opslaan");
+    toast("De wedstrijd sluit weer vanzelf zodra alles betaald is");
+    verversEnToon();
+  });
   sc.querySelectorAll("[data-plus]").forEach(b => (b.onclick = () => {
     const g = groepen.find(x => x.k === b.dataset.plus);
     const r = g?.vrij[0];
