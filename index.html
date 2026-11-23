@@ -527,7 +527,7 @@ details.alle > summary { cursor: pointer; color: var(--grijs); font-size: .9rem;
 // =====================================================================
 // Vestekaart – app
 // =====================================================================
-const VERSIE = "2026-11-11.4";
+const VERSIE = "2026-11-11.5";
 const SUPABASE_URL = "https://aealwjmfdbmxuyrqblzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_0ZG0KCFprUcN27AoaLVK-Q_ynCeVqNQ";
 const APP_URL = "https://vestekaart.mhavers.nl/";
@@ -2607,7 +2607,11 @@ async function toonVerwerken(wedId) {
       await laad();
       shots = onverwerkteShots(wedId);
     } catch (err) {
-      fout(err, "Uitlezen");
+      status.textContent = "";
+      $("#inUitkomst").innerHTML = `<div class="status let">Uitlezen lukte niet: ${esc(err.message || err)}</div>
+        <button class="knop" id="opnieuwVerwerken" style="justify-self:start">Opnieuw proberen</button>`;
+      $("#opnieuwVerwerken").onclick = () => toonVerwerken(wedId);
+      return;
     }
   }
   const gelezen = shots.filter(x => x.uitgelezen);
